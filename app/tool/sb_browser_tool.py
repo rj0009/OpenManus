@@ -4,11 +4,11 @@ import base64
 import io
 from PIL import Image
 
-from agentpress.tool import ToolResult, openapi_schema, xml_schema
-from agentpress.thread_manager import ThreadManager
-from sandbox.tool_base import SandboxToolsBase
-from utils.logger import logger
-from utils.s3_upload_utils import upload_base64_image
+from app.daytona.utils.tool import ToolResult, openapi_schema, xml_schema
+from app.daytona.utils.thread_manager import ThreadManager
+from app.daytona.tool_base import SandboxToolsBase
+from app.utils.logger import logger
+from app.utils.s3_upload_utils import upload_base64_image
 
 
 class SandboxBrowserTool(SandboxToolsBase):
