@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from agentpress.tool import ToolResult, openapi_schema, xml_schema
-from sandbox.tool_base import SandboxToolsBase
+from daytona.tool_base import SandboxToolsBase
 from utils.files_utils import clean_path
 from agentpress.thread_manager import ThreadManager
 
@@ -48,11 +48,11 @@ class SandboxDeployTool(SandboxToolsBase):
             {"param_name": "directory_path", "node_type": "attribute", "path": "directory_path"}
         ],
         example='''
-        <!-- 
+        <!--
         IMPORTANT: Only use this tool when:
         1. The user explicitly requests permanent deployment to production
-        2. You have a complete, ready-to-deploy directory 
-        
+        2. You have a complete, ready-to-deploy directory
+
         NOTE: If the same name is used, it will redeploy to the same project as before
         -->
 
@@ -68,11 +68,11 @@ class SandboxDeployTool(SandboxToolsBase):
         """
         Deploy a static website (HTML+CSS+JS) from the sandbox to Cloudflare Pages.
         Only use this tool when permanent deployment to a production environment is needed.
-        
+
         Args:
             name: Name for the deployment, will be used in the URL as {name}.kortix.cloud
             directory_path: Path to the directory to deploy, relative to /workspace
-            
+
         Returns:
             ToolResult containing:
             - Success: Deployment information including URL
@@ -81,10 +81,10 @@ class SandboxDeployTool(SandboxToolsBase):
         try:
             # Ensure sandbox is initialized
             await self._ensure_sandbox()
-            
+
             directory_path = self.clean_path(directory_path)
             full_path = f"{self.workspace_path}/{directory_path}"
-            
+
             # Verify the directory exists
             try:
                 dir_info = self.sandbox.fs.get_file_info(full_path)
@@ -92,26 +92,26 @@ class SandboxDeployTool(SandboxToolsBase):
                     return self.fail_response(f"'{directory_path}' is not a directory")
             except Exception as e:
                 return self.fail_response(f"Directory '{directory_path}' does not exist: {str(e)}")
-            
+
             # Deploy to Cloudflare Pages directly from the container
             try:
                 # Get Cloudflare API token from environment
                 if not self.cloudflare_api_token:
                     return self.fail_response("CLOUDFLARE_API_TOKEN environment variable not set")
-                    
+
                 # Single command that creates the project if it doesn't exist and then deploys
                 project_name = f"{self.sandbox_id}-{name}"
-                deploy_cmd = f'''cd {self.workspace_path} && export CLOUDFLARE_API_TOKEN={self.cloudflare_api_token} && 
-                    (npx wrangler pages deploy {full_path} --project-name {project_name} || 
-                    (npx wrangler pages project create {project_name} --production-branch production && 
+                deploy_cmd = f'''cd {self.workspace_path} && export CLOUDFLARE_API_TOKEN={self.cloudflare_api_token} &&
+                    (npx wrangler pages deploy {full_path} --project-name {project_name} ||
+                    (npx wrangler pages project create {project_name} --production-branch production &&
                     npx wrangler pages deploy {full_path} --project-name {project_name}))'''
 
                 # Execute the command directly using the sandbox's process.exec method
                 response = self.sandbox.process.exec(f"/bin/sh -c \"{deploy_cmd}\"",
                                  timeout=300)
-                
+
                 print(f"Deployment command output: {response.result}")
-                
+
                 if response.exit_code == 0:
                     return self.success_response({
                         "message": f"Website deployed successfully",
@@ -127,21 +127,21 @@ class SandboxDeployTool(SandboxToolsBase):
 if __name__ == "__main__":
     import asyncio
     import sys
-    
+
     async def test_deploy():
         # Replace these with actual values for testing
         sandbox_id = "sandbox-ccb30b35"
         password = "test-password"
-        
+
         # Initialize the deploy tool
         deploy_tool = SandboxDeployTool(sandbox_id, password)
-        
+
         # Test deployment - replace with actual directory path and site name
         result = await deploy_tool.deploy(
             name="test-site-1x",
             directory_path="website"  # Directory containing static site files
         )
         print(f"Deployment result: {result}")
-            
+
     asyncio.run(test_deploy())
 

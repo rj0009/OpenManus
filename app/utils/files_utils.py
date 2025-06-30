@@ -40,10 +40,10 @@ EXCLUDED_EXT = {
 
 def should_exclude_file(rel_path: str) -> bool:
     """Check if a file should be excluded based on path, name, or extension
-    
+
     Args:
         rel_path: Relative path of the file to check
-        
+
     Returns:
         True if the file should be excluded, False otherwise
     """
@@ -62,30 +62,30 @@ def should_exclude_file(rel_path: str) -> bool:
     if ext.lower() in EXCLUDED_EXT:
         return True
 
-    return False 
+    return False
 
 def clean_path(path: str, workspace_path: str = "/workspace") -> str:
     """Clean and normalize a path to be relative to the workspace
-    
+
     Args:
         path: The path to clean
         workspace_path: The base workspace path to remove (default: "/workspace")
-        
+
     Returns:
         The cleaned path, relative to the workspace
     """
     # Remove any leading slash
     path = path.lstrip('/')
-    
+
     # Remove workspace prefix if present
     if path.startswith(workspace_path.lstrip('/')):
         path = path[len(workspace_path.lstrip('/')):]
-    
+
     # Remove workspace/ prefix if present
     if path.startswith('workspace/'):
         path = path[9:]
-    
+
     # Remove any remaining leading slash
     path = path.lstrip('/')
-    
-    return path 
+
+    return path

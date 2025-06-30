@@ -1,5 +1,5 @@
 from agentpress.tool import ToolResult, openapi_schema, xml_schema
-from sandbox.tool_base import SandboxToolsBase
+from daytona.tool_base import SandboxToolsBase
 from agentpress.thread_manager import ThreadManager
 import asyncio
 import time
@@ -13,25 +13,25 @@ class SandboxExposeTool(SandboxToolsBase):
     async def _wait_for_sandbox_services(self, timeout: int = 30) -> bool:
         """Wait for sandbox services to be fully started before exposing ports."""
         start_time = time.time()
-        
+
         while time.time() - start_time < timeout:
             try:
                 # Check if supervisord is running and managing services
                 result = self.sandbox.process.exec("supervisorctl status", timeout=10)
-                
+
                 if result.exit_code == 0:
                     # Check if key services are running
                     status_output = result.output
                     if "http_server" in status_output and "RUNNING" in status_output:
                         return True
-                
+
                 # If services aren't ready, wait a bit
                 await asyncio.sleep(2)
-                
+
             except Exception as e:
                 # If we can't check status, wait a bit and try again
                 await asyncio.sleep(2)
-        
+
         return False
 
     @openapi_schema({
@@ -85,10 +85,10 @@ class SandboxExposeTool(SandboxToolsBase):
         try:
             # Ensure sandbox is initialized
             await self._ensure_sandbox()
-            
+
             # Convert port to integer if it's a string
             port = int(port)
-            
+
             # Validate port number
             if not 1 <= port <= 65535:
                 return self.fail_response(f"Invalid port number: {port}. Must be between 1 and 65535.")
@@ -110,16 +110,16 @@ class SandboxExposeTool(SandboxToolsBase):
 
             # Get the preview link for the specified port
             preview_link = self.sandbox.get_preview_link(port)
-            
+
             # Extract the actual URL from the preview link object
             url = preview_link.url if hasattr(preview_link, 'url') else str(preview_link)
-            
+
             return self.success_response({
                 "url": url,
                 "port": port,
                 "message": f"Successfully exposed port {port} to the public. Users can now access this service at: {url}"
             })
-                
+
         except ValueError:
             return self.fail_response(f"Invalid port number: {port}. Must be a valid integer between 1 and 65535.")
         except Exception as e:
