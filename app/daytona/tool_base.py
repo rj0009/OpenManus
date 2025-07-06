@@ -1,72 +1,77 @@
 
-from typing import Optional
-
-from agentpress.thread_manager import ThreadManager
+from typing import Optional,ClassVar
+from pydantic import Field
+# from app.agentpress.thread_manager import ThreadManager
 from app.tool.base import BaseTool, ToolResult
-from daytona_sdk import Sandbox
-from daytona.sandbox import get_or_start_sandbox
-from utils.logger import logger
-from utils.files_utils import clean_path
+from daytona import Sandbox
+from app.daytona.sandbox import get_or_start_sandbox
+from app.utils.logger import logger
+from app.utils.files_utils import clean_path
 
 class SandboxToolsBase(BaseTool):
     """Base class for all sandbox tools that provides project-based sandbox access."""
 
     # Class variable to track if sandbox URLs have been printed
-    _urls_printed = False
+    _urls_printed: ClassVar[bool] = False
 
-    def __init__(self, project_id: str, thread_manager: Optional[ThreadManager] = None):
-        super().__init__()
-        self.project_id = project_id
-        self.thread_manager = thread_manager
-        self.workspace_path = "/workspace"
-        self._sandbox = None
-        self._sandbox_id = None
-        self._sandbox_pass = None
+    # Required fields
+    project_id: Optional[str] = None
+    # thread_manager: Optional[ThreadManager] = None
 
-    async def _ensure_sandbox(self) -> Sandbox:
-        """Ensure we have a valid sandbox instance, retrieving it from the project if needed."""
-        if self._sandbox is None:
-            try:
-                # Get database client
-                client = await self.thread_manager.db.client
+    # Private fields (not part of the model schema)
+    _sandbox: Optional[Sandbox] = None
+    _sandbox_id: Optional[str] = None
+    _sandbox_pass: Optional[str] = None
+    workspace_path: str = Field(default="/workspace", exclude=True)
 
-                # Get project data
-                project = await client.table('projects').select('*').eq('project_id', self.project_id).execute()
-                if not project.data or len(project.data) == 0:
-                    raise ValueError(f"Project {self.project_id} not found")
+    class Config:
+        arbitrary_types_allowed = True  # Allow non-pydantic types like ThreadManager
+        underscore_attrs_are_private = True
 
-                project_data = project.data[0]
-                sandbox_info = project_data.get('sandbox', {})
+    # async def _ensure_sandbox(self) -> Sandbox:
+    #     """Ensure we have a valid sandbox instance, retrieving it from the project if needed."""
+    #     if self._sandbox is None:
+    #         try:
+    #             # Get database client
+    #             client = await self.thread_manager.db.client
 
-                if not sandbox_info.get('id'):
-                    raise ValueError(f"No sandbox found for project {self.project_id}")
+    #             # Get project data
+    #             project = await client.table('projects').select('*').eq('project_id', self.project_id).execute()
+    #             if not project.data or len(project.data) == 0:
+    #                 raise ValueError(f"Project {self.project_id} not found")
 
-                # Store sandbox info
-                self._sandbox_id = sandbox_info['id']
-                self._sandbox_pass = sandbox_info.get('pass')
+    #             project_data = project.data[0]
+    #             sandbox_info = project_data.get('sandbox', {})
 
-                # Get or start the sandbox
-                self._sandbox = await get_or_start_sandbox(self._sandbox_id)
+    #             if not sandbox_info.get('id'):
+    #                 raise ValueError(f"No sandbox found for project {self.project_id}")
 
-                # # Log URLs if not already printed
-                # if not SandboxToolsBase._urls_printed:
-                #     vnc_link = self._sandbox.get_preview_link(6080)
-                #     website_link = self._sandbox.get_preview_link(8080)
+    #             # Store sandbox info
+    #             self._sandbox_id = sandbox_info['id']
+    #             self._sandbox_pass = sandbox_info.get('pass')
 
-                #     vnc_url = vnc_link.url if hasattr(vnc_link, 'url') else str(vnc_link)
-                #     website_url = website_link.url if hasattr(website_link, 'url') else str(website_link)
+    #             # Get or start the sandbox
+    #             self._sandbox = await get_or_start_sandbox(self._sandbox_id)
 
-                #     print("\033[95m***")
-                #     print(f"VNC URL: {vnc_url}")
-                #     print(f"Website URL: {website_url}")
-                #     print("***\033[0m")
-                #     SandboxToolsBase._urls_printed = True
+    #             # # Log URLs if not already printed
+    #             # if not SandboxToolsBase._urls_printed:
+    #             #     vnc_link = self._sandbox.get_preview_link(6080)
+    #             #     website_link = self._sandbox.get_preview_link(8080)
 
-            except Exception as e:
-                logger.error(f"Error retrieving sandbox for project {self.project_id}: {str(e)}", exc_info=True)
-                raise e
+    #             #     vnc_url = vnc_link.url if hasattr(vnc_link, 'url') else str(vnc_link)
+    #             #     website_url = website_link.url if hasattr(website_link, 'url') else str(website_link)
 
-        return self._sandbox
+    #             #     print("\033[95m***")
+    #             #     print(f"VNC URL: {vnc_url}")
+    #             #     print(f"Website URL: {website_url}")
+    #             #     print("***\033[0m")
+    #             #     SandboxToolsBase._urls_printed = True
+
+    #         except Exception as e:
+    #             logger.error(f"Error retrieving sandbox for project {self.project_id}: {str(e)}", exc_info=True)
+    #             raise e
+
+    #     return self._sandbox
 
     @property
     def sandbox(self) -> Sandbox:

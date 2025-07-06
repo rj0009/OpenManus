@@ -12,18 +12,18 @@ This module provides comprehensive conversation management, including:
 
 import json
 from typing import List, Dict, Any, Optional, Type, Union, AsyncGenerator, Literal
-from services.llm import make_llm_api_call
-from agentpress.tool import Tool
-from agentpress.tool_registry import ToolRegistry
-from agentpress.context_manager import ContextManager
-from agentpress.response_processor import (
+from app.services.llm import make_llm_api_call
+from app.agentpress.tool import Tool
+from app.agentpress.tool_registry import ToolRegistry
+from app.agentpress.context_manager import ContextManager
+from app.agentpress.response_processor import (
     ResponseProcessor,
     ProcessorConfig
 )
-from services.supabase import DBConnection
-from utils.logger import logger
+from app.services.supabase import DBConnection
+from app.utils.logger import logger
 from langfuse.client import StatefulGenerationClient, StatefulTraceClient
-from services.langfuse import langfuse
+from app.services.langfuse import langfuse
 import datetime
 from litellm import token_counter
 
@@ -80,7 +80,7 @@ class ThreadManager:
             except (json.JSONDecodeError, TypeError):
                 pass
         return False
-    
+
     def _compress_message(self, msg_content: Union[str, dict], message_id: Optional[str] = None, max_length: int = 3000) -> Union[str, dict]:
         """Compress the message content."""
         # print("max_length", max_length)
@@ -94,7 +94,7 @@ class ThreadManager:
                 return json.dumps(msg_content)[:max_length] + "... (truncated)" + f"\n\nmessage_id \"{message_id}\"\nUse expand-message tool to see contents"
             else:
                 return msg_content
-        
+
     def _safe_truncate(self, msg_content: Union[str, dict], max_length: int = 100000) -> Union[str, dict]:
         """Truncate the message content safely by removing the middle portion."""
         max_length = min(max_length, 100000)
@@ -104,10 +104,10 @@ class ThreadManager:
                 keep_length = max_length - 150  # Reserve space for truncation message
                 start_length = keep_length // 2
                 end_length = keep_length - start_length
-                
+
                 start_part = msg_content[:start_length]
                 end_part = msg_content[-end_length:] if end_length > 0 else ""
-                
+
                 return start_part + f"\n\n... (middle truncated) ...\n\n" + end_part + f"\n\nThis message is too long, repeat relevant information in your response to remember it"
             else:
                 return msg_content
@@ -118,14 +118,14 @@ class ThreadManager:
                 keep_length = max_length - 150  # Reserve space for truncation message
                 start_length = keep_length // 2
                 end_length = keep_length - start_length
-                
+
                 start_part = json_str[:start_length]
                 end_part = json_str[-end_length:] if end_length > 0 else ""
-                
+
                 return start_part + f"\n\n... (middle truncated) ...\n\n" + end_part + f"\n\nThis message is too long, repeat relevant information in your response to remember it"
             else:
                 return msg_content
-  
+
     def _compress_tool_result_messages(self, messages: List[Dict[str, Any]], llm_model: str, max_tokens: Optional[int], token_threshold: Optional[int] = 1000) -> List[Dict[str, Any]]:
         """Compress the tool result messages except the most recent one."""
         uncompressed_total_token_count = token_counter(model=llm_model, messages=messages)
@@ -186,7 +186,7 @@ class ThreadManager:
                                 logger.warning(f"UNEXPECTED: Message has no message_id {str(msg)[:100]}")
                         else:
                             msg["content"] = self._safe_truncate(msg["content"], int(max_tokens * 2))
-                            
+
         return messages
 
 
@@ -254,17 +254,17 @@ class ThreadManager:
             result = self._compress_messages(messages, llm_model, max_tokens, int(token_threshold / 2), max_iterations - 1)
 
         return self._middle_out_messages(result)
-    
+
     def _compress_messages_by_omitting_messages(
-            self, 
-            messages: List[Dict[str, Any]], 
-            llm_model: str, 
+            self,
+            messages: List[Dict[str, Any]],
+            llm_model: str,
             max_tokens: Optional[int] = 41000,
             removal_batch_size: int = 10,
             min_messages_to_keep: int = 10
         ) -> List[Dict[str, Any]]:
         """Compress the messages by omitting messages from the middle.
-        
+
         Args:
             messages: List of messages to compress
             llm_model: Model name for token counting
@@ -274,27 +274,27 @@ class ThreadManager:
         """
         if not messages:
             return messages
-            
+
         result = messages
         result = self._remove_meta_messages(result)
 
         # Early exit if no compression needed
         initial_token_count = token_counter(model=llm_model, messages=result)
         max_allowed_tokens = max_tokens or (100 * 1000)
-        
+
         if initial_token_count <= max_allowed_tokens:
             return result
 
         # Separate system message (assumed to be first) from conversation messages
         system_message = messages[0] if messages and messages[0].get('role') == 'system' else None
         conversation_messages = result[1:] if system_message else result
-        
+
         safety_limit = 500
         current_token_count = initial_token_count
-        
+
         while current_token_count > max_allowed_tokens and safety_limit > 0:
             safety_limit -= 1
-            
+
             if len(conversation_messages) <= min_messages_to_keep:
                 logger.warning(f"Cannot compress further: only {len(conversation_messages)} messages remain (min: {min_messages_to_keep})")
                 break
@@ -321,20 +321,20 @@ class ThreadManager:
         # Prepare final result
         final_messages = ([system_message] + conversation_messages) if system_message else conversation_messages
         final_token_count = token_counter(model=llm_model, messages=final_messages)
-        
+
         logger.info(f"_compress_messages_by_omitting_messages: {initial_token_count} -> {final_token_count} tokens ({len(messages)} -> {len(final_messages)} messages)")
-            
+
         return final_messages
-    
+
     def _middle_out_messages(self, messages: List[Dict[str, Any]], max_messages: int = 320) -> List[Dict[str, Any]]:
         """Remove messages from the middle of the list, keeping max_messages total."""
         if len(messages) <= max_messages:
             return messages
-        
+
         # Keep half from the beginning and half from the end
         keep_start = max_messages // 2
         keep_end = max_messages - keep_start
-        
+
         return messages[:keep_start] + messages[-keep_end:]
 
 
@@ -377,7 +377,7 @@ class ThreadManager:
             'is_llm_message': is_llm_message,
             'metadata': metadata or {},
         }
-        
+
         # Add agent information if provided
         if agent_id:
             data_to_insert['agent_id'] = agent_id
@@ -415,26 +415,26 @@ class ThreadManager:
 
         try:
             # result = await client.rpc('get_llm_formatted_messages', {'p_thread_id': thread_id}).execute()
-            
+
             # Fetch messages in batches of 1000 to avoid overloading the database
             all_messages = []
             batch_size = 1000
             offset = 0
-            
+
             while True:
                 result = await client.table('messages').select('message_id, content').eq('thread_id', thread_id).eq('is_llm_message', True).order('created_at').range(offset, offset + batch_size - 1).execute()
-                
+
                 if not result.data or len(result.data) == 0:
                     break
-                    
+
                 all_messages.extend(result.data)
-                
+
                 # If we got fewer than batch_size records, we've reached the end
                 if len(result.data) < batch_size:
                     break
-                    
+
                 offset += batch_size
-            
+
             # Use all_messages instead of result.data in the rest of the method
             result_data = all_messages
 

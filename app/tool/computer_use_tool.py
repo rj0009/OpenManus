@@ -4,9 +4,9 @@ import base64
 import aiohttp
 import asyncio
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict,Literal
 import os
-
+from pydantic import Field
 # from agentpress.tool import Tool, ToolResult, openapi_schema, xml_schema
 from app.daytona.tool_base import SandboxToolsBase, Sandbox
 from app.tool.base import ToolResult
@@ -775,7 +775,19 @@ class ComputerUseTool(SandboxToolsBase):
     mouse_x: int = Field(default=0, exclude=True)
     mouse_y: int = Field(default=0, exclude=True)
     api_base_url: Optional[str] = Field(default=None, exclude=True)
-    sandbox: Optional[Sandbox] = Field(default=None, exclude=True)
+    def __init__(self, sandbox: Optional[Sandbox] = None, **data):
+        """Initialize with optional sandbox."""
+        super().__init__(**data)
+        if sandbox is not None:
+            self._sandbox = sandbox  # 直接操作基类的私有属性
+            self.api_base_url = sandbox.get_preview_link(8000)
+            logging.info(f"Initialized ComputerUseTool with API URL: {self.api_base_url}")
+
+    @classmethod
+    def create_with_sandbox(cls, sandbox: Sandbox) -> "ComputerUseTool":
+        """Factory method to create a tool with sandbox."""
+        return cls(sandbox=sandbox)  # 通过构造函数初始化
+
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session for API requests."""
         if self.session is None or self.session.closed:
@@ -1008,21 +1020,31 @@ class ComputerUseTool(SandboxToolsBase):
         if self.session and not self.session.closed:
             await self.session.close()
             self.session = None
+
     def __del__(self):
-        """Ensure cleanup when object is destroyed."""
-        if self.session is not None:
+        """Ensure cleanup on destruction."""
+        if hasattr(self, 'session') and self.session is not None:
             try:
                 asyncio.run(self.cleanup())
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 loop.run_until_complete(self.cleanup())
                 loop.close()
-    @classmethod
-    def create_with_sandbox(cls, sandbox: Sandbox) -> "ComputerUseTool":
-        """Factory method to create a ComputerUseTool with a sandbox connection."""
-        tool = cls()
-        tool.sandbox = sandbox
-        tool.api_base_url = sandbox.get_preview_link(8000)
-        logging.info(f"Initialized Computer Use Tool with API URL: {tool.api_base_url}")
-        return tool
+    # def __del__(self):
+    #     """Ensure cleanup when object is destroyed."""
+    #     if self.session is not None:
+    #         try:
+    #             asyncio.run(self.cleanup())
+    #         except RuntimeError:
+    #             loop = asyncio.new_event_loop()
+    #             loop.run_until_complete(self.cleanup())
+    #             loop.close()
+    # @classmethod
+    # def create_with_sandbox(cls, sandbox: Sandbox) -> "ComputerUseTool":
+    #     """Factory method to create a ComputerUseTool with a sandbox connection."""
+    #     tool = cls()
+    #     tool.sandbox = sandbox
+    #     tool.api_base_url = sandbox.get_preview_link(8000)
+    #     logging.info(f"Initialized Computer Use Tool with API URL: {tool.api_base_url}")
+    #     return tool
 

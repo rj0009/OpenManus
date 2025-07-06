@@ -15,14 +15,14 @@ import asyncio
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple, Union, Callable, Literal
 from dataclasses import dataclass
-from utils.logger import logger
-from agentpress.tool import ToolResult
-from agentpress.tool_registry import ToolRegistry
-from agentpress.xml_tool_parser import XMLToolParser
+from app.utils.logger import logger
+from app.agentpress.tool import ToolResult
+from app.agentpress.tool_registry import ToolRegistry
+from app.agentpress.xml_tool_parser import XMLToolParser
 from langfuse.client import StatefulTraceClient
-from services.langfuse import langfuse
-from agentpress.utils.json_helpers import (
-    ensure_dict, ensure_list, safe_json_parse, 
+from app.services.langfuse import langfuse
+from app.agentpress.utils.json_helpers import (
+    ensure_dict, ensure_list, safe_json_parse,
     to_json_string, format_for_yield
 )
 from litellm import token_counter
@@ -49,10 +49,10 @@ class ToolExecutionContext:
 class ProcessorConfig:
     """
     Configuration for response processing and tool execution.
-    
+
     This class controls how the LLM's responses are processed, including how tool calls
     are detected, executed, and their results handled.
-    
+
     Attributes:
         xml_tool_calling: Enable XML-based tool call detection (<tool>...</tool>)
         native_tool_calling: Enable OpenAI-style function calling format
@@ -63,7 +63,7 @@ class ProcessorConfig:
         max_xml_tool_calls: Maximum number of XML tool calls to process (0 = no limit)
     """
 
-    xml_tool_calling: bool = True  
+    xml_tool_calling: bool = True
     native_tool_calling: bool = False
 
     execute_tools: bool = True
@@ -71,24 +71,24 @@ class ProcessorConfig:
     tool_execution_strategy: ToolExecutionStrategy = "sequential"
     xml_adding_strategy: XmlAddingStrategy = "assistant_message"
     max_xml_tool_calls: int = 0  # 0 means no limit
-    
+
     def __post_init__(self):
         """Validate configuration after initialization."""
         if self.xml_tool_calling is False and self.native_tool_calling is False and self.execute_tools:
             raise ValueError("At least one tool calling format (XML or native) must be enabled if execute_tools is True")
-            
+
         if self.xml_adding_strategy not in ["user_message", "assistant_message", "inline_edit"]:
             raise ValueError("xml_adding_strategy must be 'user_message', 'assistant_message', or 'inline_edit'")
-        
+
         if self.max_xml_tool_calls < 0:
             raise ValueError("max_xml_tool_calls must be a non-negative integer (0 = no limit)")
 
 class ResponseProcessor:
     """Processes LLM responses, extracting and executing tool calls."""
-    
+
     def __init__(self, tool_registry: ToolRegistry, add_message_callback: Callable, trace: Optional[StatefulTraceClient] = None, is_agent_builder: bool = False, target_agent_id: Optional[str] = None, agent_config: Optional[dict] = None):
         """Initialize the ResponseProcessor.
-        
+
         Args:
             tool_registry: Registry of available tools
             add_message_callback: Callback function to add messages to the thread.
@@ -108,7 +108,7 @@ class ResponseProcessor:
 
     async def _yield_message(self, message_obj: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Helper to yield a message with proper formatting.
-        
+
         Ensures that content and metadata are JSON strings for client compatibility.
         """
         if message_obj:
@@ -125,11 +125,11 @@ class ResponseProcessor:
         """Helper to add a message with agent version information if available."""
         agent_id = None
         agent_version_id = None
-        
+
         if self.agent_config:
             agent_id = self.agent_config.get('agent_id')
             agent_version_id = self.agent_config.get('current_version_id')
-            
+
         return await self.add_message(
             thread_id=thread_id,
             type=type,
@@ -149,14 +149,14 @@ class ResponseProcessor:
         config: ProcessorConfig = ProcessorConfig(),
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Process a streaming LLM response, handling tool calls and execution.
-        
+
         Args:
             llm_response: Streaming response from the LLM
             thread_id: ID of the conversation thread
             prompt_messages: List of messages sent to the LLM (the prompt)
             llm_model: The name of the LLM model used
             config: Configuration for parsing and execution
-            
+
         Yields:
             Complete message objects matching the DB schema, except for content chunks.
         """
@@ -198,14 +198,14 @@ class ResponseProcessor:
             # --- Save and Yield Start Events ---
             start_content = {"status_type": "thread_run_start", "thread_run_id": thread_run_id}
             start_msg_obj = await self.add_message(
-                thread_id=thread_id, type="status", content=start_content, 
+                thread_id=thread_id, type="status", content=start_content,
                 is_llm_message=False, metadata={"thread_run_id": thread_run_id}
             )
             if start_msg_obj: yield format_for_yield(start_msg_obj)
 
             assist_start_content = {"status_type": "assistant_response_start"}
             assist_start_msg_obj = await self.add_message(
-                thread_id=thread_id, type="status", content=assist_start_content, 
+                thread_id=thread_id, type="status", content=assist_start_content,
                 is_llm_message=False, metadata={"thread_run_id": thread_run_id}
             )
             if assist_start_msg_obj: yield format_for_yield(assist_start_msg_obj)
@@ -219,7 +219,7 @@ class ResponseProcessor:
                 if streaming_metadata["first_chunk_time"] is None:
                     streaming_metadata["first_chunk_time"] = current_time
                 streaming_metadata["last_chunk_time"] = current_time
-                
+
                 # Extract metadata from chunk attributes
                 if hasattr(chunk, 'created') and chunk.created:
                     streaming_metadata["created"] = chunk.created
@@ -240,7 +240,7 @@ class ResponseProcessor:
 
                 if hasattr(chunk, 'choices') and chunk.choices:
                     delta = chunk.choices[0].delta if hasattr(chunk.choices[0], 'delta') else None
-                    
+
                     # Check for and log Anthropic thinking content
                     if delta and hasattr(delta, 'reasoning_content') and delta.reasoning_content:
                         if not has_printed_thinking_prefix:
@@ -379,12 +379,12 @@ class ResponseProcessor:
             # print() # Add a final newline after the streaming loop finishes
 
             # --- After Streaming Loop ---
-            
+
             if (
                 streaming_metadata["usage"]["total_tokens"] == 0
             ):
                 logger.info("🔥 No usage data from provider, counting with litellm.token_counter")
-                
+
                 try:
                     # prompt side
                     prompt_tokens = token_counter(
@@ -425,7 +425,7 @@ class ResponseProcessor:
                     tool_idx = execution.get("tool_index", -1)
                     context = execution["context"]
                     tool_name = context.function_name
-                    
+
                     # Check if status was already yielded during stream run
                     if tool_idx in yielded_tool_indices:
                          logger.debug(f"Status for tool index {tool_idx} already yielded.")
@@ -435,12 +435,12 @@ class ResponseProcessor:
                                  result = execution["task"].result()
                                  context.result = result
                                  tool_results_buffer.append((execution["tool_call"], result, tool_idx, context))
-                                 
+
                                  if tool_name in ['ask', 'complete']:
                                      logger.info(f"Terminating tool '{tool_name}' completed during streaming. Setting termination flag.")
                                      self.trace.event(name="terminating_tool_completed_during_streaming", level="DEFAULT", status_message=(f"Terminating tool '{tool_name}' completed during streaming. Setting termination flag."))
                                      agent_should_terminate = True
-                                     
+
                              else: # Should not happen with asyncio.wait
                                 logger.warning(f"Task for tool index {tool_idx} not done after wait.")
                                 self.trace.event(name="task_for_tool_index_not_done_after_wait", level="WARNING", status_message=(f"Task for tool index {tool_idx} not done after wait."))
@@ -459,13 +459,13 @@ class ResponseProcessor:
                             result = execution["task"].result()
                             context.result = result
                             tool_results_buffer.append((execution["tool_call"], result, tool_idx, context))
-                            
+
                             # Check if this is a terminating tool
                             if tool_name in ['ask', 'complete']:
                                 logger.info(f"Terminating tool '{tool_name}' completed during streaming. Setting termination flag.")
                                 self.trace.event(name="terminating_tool_completed_during_streaming", level="DEFAULT", status_message=(f"Terminating tool '{tool_name}' completed during streaming. Setting termination flag."))
                                 agent_should_terminate = True
-                                
+
                             # Save and Yield tool completed/failed status
                             completed_msg_obj = await self._yield_and_save_tool_completed(
                                 context, None, thread_id, thread_run_id
@@ -486,7 +486,7 @@ class ResponseProcessor:
             if finish_reason == "xml_tool_limit_reached":
                 finish_content = {"status_type": "finish", "finish_reason": "xml_tool_limit_reached"}
                 finish_msg_obj = await self.add_message(
-                    thread_id=thread_id, type="status", content=finish_content, 
+                    thread_id=thread_id, type="status", content=finish_content,
                     is_llm_message=False, metadata={"thread_run_id": thread_run_id}
                 )
                 if finish_msg_obj: yield format_for_yield(finish_msg_obj)
@@ -539,7 +539,7 @@ class ResponseProcessor:
                     # Save and yield an error status
                     err_content = {"role": "system", "status_type": "error", "message": "Failed to save final assistant message"}
                     err_msg_obj = await self.add_message(
-                        thread_id=thread_id, type="status", content=err_content, 
+                        thread_id=thread_id, type="status", content=err_content,
                         is_llm_message=False, metadata={"thread_run_id": thread_run_id}
                     )
                     if err_msg_obj: yield format_for_yield(err_msg_obj)
@@ -673,7 +673,7 @@ class ResponseProcessor:
             if finish_reason and finish_reason != "xml_tool_limit_reached":
                 finish_content = {"status_type": "finish", "finish_reason": finish_reason}
                 finish_msg_obj = await self.add_message(
-                    thread_id=thread_id, type="status", content=finish_content, 
+                    thread_id=thread_id, type="status", content=finish_content,
                     is_llm_message=False, metadata={"thread_run_id": thread_run_id}
                 )
                 if finish_msg_obj: yield format_for_yield(finish_msg_obj)
@@ -682,18 +682,18 @@ class ResponseProcessor:
             if agent_should_terminate:
                 logger.info("Agent termination requested after executing ask/complete tool. Stopping further processing.")
                 self.trace.event(name="agent_termination_requested", level="DEFAULT", status_message="Agent termination requested after executing ask/complete tool. Stopping further processing.")
-                
+
                 # Set finish reason to indicate termination
                 finish_reason = "agent_terminated"
-                
+
                 # Save and yield termination status
                 finish_content = {"status_type": "finish", "finish_reason": "agent_terminated"}
                 finish_msg_obj = await self.add_message(
-                    thread_id=thread_id, type="status", content=finish_content, 
+                    thread_id=thread_id, type="status", content=finish_content,
                     is_llm_message=False, metadata={"thread_run_id": thread_run_id}
                 )
                 if finish_msg_obj: yield format_for_yield(finish_msg_obj)
-                
+
                 # Save assistant_response_end BEFORE terminating
                 if last_assistant_message_object:
                     try:
@@ -708,7 +708,7 @@ class ResponseProcessor:
                             streaming_metadata["usage"]["completion_tokens"] > 0 or
                             streaming_metadata["usage"]["total_tokens"] > 0
                         )
-                        
+
                         assistant_end_content = {
                             "choices": [
                                 {
@@ -726,11 +726,11 @@ class ResponseProcessor:
                             "usage": streaming_metadata["usage"],  # Always include usage like LiteLLM does
                             "streaming": True,  # Add flag to indicate this was reconstructed from streaming
                         }
-                        
+
                         # Only include response_ms if we have timing data
                         if streaming_metadata.get("response_ms"):
                             assistant_end_content["response_ms"] = streaming_metadata["response_ms"]
-                        
+
                         await self.add_message(
                             thread_id=thread_id,
                             type="assistant_response_end",
@@ -742,7 +742,7 @@ class ResponseProcessor:
                     except Exception as e:
                         logger.error(f"Error saving assistant response end for stream (before termination): {str(e)}")
                         self.trace.event(name="error_saving_assistant_response_end_for_stream_before_termination", level="ERROR", status_message=(f"Error saving assistant response end for stream (before termination): {str(e)}"))
-                
+
                 # Skip all remaining processing and go to finally block
                 return
 
@@ -760,7 +760,7 @@ class ResponseProcessor:
                         streaming_metadata["usage"]["completion_tokens"] > 0 or
                         streaming_metadata["usage"]["total_tokens"] > 0
                     )
-                    
+
                     assistant_end_content = {
                         "choices": [
                             {
@@ -778,11 +778,11 @@ class ResponseProcessor:
                         "usage": streaming_metadata["usage"],  # Always include usage like LiteLLM does
                         "streaming": True,  # Add flag to indicate this was reconstructed from streaming
                     }
-                    
+
                     # Only include response_ms if we have timing data
                     if streaming_metadata.get("response_ms"):
                         assistant_end_content["response_ms"] = streaming_metadata["response_ms"]
-                    
+
                     await self.add_message(
                         thread_id=thread_id,
                         type="assistant_response_end",
@@ -801,11 +801,11 @@ class ResponseProcessor:
             # Save and yield error status message
             err_content = {"role": "system", "status_type": "error", "message": str(e)}
             err_msg_obj = await self.add_message(
-                thread_id=thread_id, type="status", content=err_content, 
+                thread_id=thread_id, type="status", content=err_content,
                 is_llm_message=False, metadata={"thread_run_id": thread_run_id if 'thread_run_id' in locals() else None}
             )
             if err_msg_obj: yield format_for_yield(err_msg_obj) # Yield the saved error message
-            
+
             # Re-raise the same exception (not a new one) to ensure proper error propagation
             logger.critical(f"Re-raising error to stop further processing: {str(e)}")
             self.trace.event(name="re_raising_error_to_stop_further_processing", level="ERROR", status_message=(f"Re-raising error to stop further processing: {str(e)}"))
@@ -816,7 +816,7 @@ class ResponseProcessor:
             try:
                 end_content = {"status_type": "thread_run_end"}
                 end_msg_obj = await self.add_message(
-                    thread_id=thread_id, type="status", content=end_content, 
+                    thread_id=thread_id, type="status", content=end_content,
                     is_llm_message=False, metadata={"thread_run_id": thread_run_id if 'thread_run_id' in locals() else None}
                 )
                 if end_msg_obj: yield format_for_yield(end_msg_obj)
@@ -833,14 +833,14 @@ class ResponseProcessor:
         config: ProcessorConfig = ProcessorConfig(),
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Process a non-streaming LLM response, handling tool calls and execution.
-        
+
         Args:
             llm_response: Response from the LLM
             thread_id: ID of the conversation thread
             prompt_messages: List of messages sent to the LLM (the prompt)
             llm_model: The name of the LLM model used
             config: Configuration for parsing and execution
-            
+
         Yields:
             Complete message objects matching the DB schema.
         """
@@ -918,7 +918,7 @@ class ResponseProcessor:
                  self.trace.event(name="failed_to_save_non_streaming_assistant_message_for_thread", level="ERROR", status_message=(f"Failed to save non-streaming assistant message for thread {thread_id}"))
                  err_content = {"role": "system", "status_type": "error", "message": "Failed to save assistant message"}
                  err_msg_obj = await self.add_message(
-                     thread_id=thread_id, type="status", content=err_content, 
+                     thread_id=thread_id, type="status", content=err_content,
                      is_llm_message=False, metadata={"thread_run_id": thread_run_id}
                  )
                  if err_msg_obj: yield format_for_yield(err_msg_obj)
@@ -973,7 +973,7 @@ class ResponseProcessor:
             if finish_reason:
                 finish_content = {"status_type": "finish", "finish_reason": finish_reason}
                 finish_msg_obj = await self.add_message(
-                    thread_id=thread_id, type="status", content=finish_content, 
+                    thread_id=thread_id, type="status", content=finish_content,
                     is_llm_message=False, metadata={"thread_run_id": thread_run_id}
                 )
                 if finish_msg_obj: yield format_for_yield(finish_msg_obj)
@@ -1000,11 +1000,11 @@ class ResponseProcessor:
              # Save and yield error status
              err_content = {"role": "system", "status_type": "error", "message": str(e)}
              err_msg_obj = await self.add_message(
-                 thread_id=thread_id, type="status", content=err_content, 
+                 thread_id=thread_id, type="status", content=err_content,
                  is_llm_message=False, metadata={"thread_run_id": thread_run_id if 'thread_run_id' in locals() else None}
              )
              if err_msg_obj: yield format_for_yield(err_msg_obj)
-             
+
              # Re-raise the same exception (not a new one) to ensure proper error propagation
              logger.critical(f"Re-raising error to stop further processing: {str(e)}")
              self.trace.event(name="re_raising_error_to_stop_further_processing", level="CRITICAL", status_message=(f"Re-raising error to stop further processing: {str(e)}"))
@@ -1014,7 +1014,7 @@ class ResponseProcessor:
              # Save and Yield the final thread_run_end status
             end_content = {"status_type": "thread_run_end"}
             end_msg_obj = await self.add_message(
-                thread_id=thread_id, type="status", content=end_content, 
+                thread_id=thread_id, type="status", content=end_content,
                 is_llm_message=False, metadata={"thread_run_id": thread_run_id if 'thread_run_id' in locals() else None}
             )
             if end_msg_obj: yield format_for_yield(end_msg_obj)
@@ -1024,30 +1024,30 @@ class ResponseProcessor:
         """Extract content between opening and closing tags, handling nested tags."""
         start_tag = f'<{tag_name}'
         end_tag = f'</{tag_name}>'
-        
+
         try:
             # Find start tag position
             start_pos = xml_chunk.find(start_tag)
             if start_pos == -1:
                 return None, xml_chunk
-                
+
             # Find end of opening tag
             tag_end = xml_chunk.find('>', start_pos)
             if tag_end == -1:
                 return None, xml_chunk
-                
+
             # Find matching closing tag
             content_start = tag_end + 1
             nesting_level = 1
             pos = content_start
-            
+
             while nesting_level > 0 and pos < len(xml_chunk):
                 next_start = xml_chunk.find(start_tag, pos)
                 next_end = xml_chunk.find(end_tag, pos)
-                
+
                 if next_end == -1:
                     return None, xml_chunk
-                    
+
                 if next_start != -1 and next_start < next_end:
                     nesting_level += 1
                     pos = next_start + len(start_tag)
@@ -1059,9 +1059,9 @@ class ResponseProcessor:
                         return content, remaining
                     else:
                         pos = next_end + len(end_tag)
-            
+
             return None, xml_chunk
-            
+
         except Exception as e:
             logger.error(f"Error extracting tag content: {e}")
             self.trace.event(name="error_extracting_tag_content", level="ERROR", status_message=(f"Error extracting tag content: {e}"))
@@ -1076,7 +1076,7 @@ class ResponseProcessor:
                 fr"{attr_name}='([^']*)'",  # Single quotes
                 fr'{attr_name}=([^\s/>;]+)'  # No quotes - fixed escape sequence
             ]
-            
+
             for pattern in patterns:
                 match = re.search(pattern, opening_tag)
                 if match:
@@ -1086,9 +1086,9 @@ class ResponseProcessor:
                     value = value.replace('&lt;', '<').replace('&gt;', '>')
                     value = value.replace('&amp;', '&')
                     return value
-            
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error extracting attribute: {e}")
             self.trace.event(name="error_extracting_attribute", level="ERROR", status_message=(f"Error extracting attribute: {e}"))
@@ -1098,31 +1098,31 @@ class ResponseProcessor:
         """Extract complete XML chunks using start and end pattern matching."""
         chunks = []
         pos = 0
-        
+
         try:
             # First, look for new format <function_calls> blocks
             start_pattern = '<function_calls>'
             end_pattern = '</function_calls>'
-            
+
             while pos < len(content):
                 # Find the next function_calls block
                 start_pos = content.find(start_pattern, pos)
                 if start_pos == -1:
                     break
-                
+
                 # Find the matching end tag
                 end_pos = content.find(end_pattern, start_pos)
                 if end_pos == -1:
                     break
-                
+
                 # Extract the complete block including tags
                 chunk_end = end_pos + len(end_pattern)
                 chunk = content[start_pos:chunk_end]
                 chunks.append(chunk)
-                
+
                 # Move position past this chunk
                 pos = chunk_end
-            
+
             # If no new format found, fall back to old format for backwards compatibility
             if not chunks:
                 pos = 0
@@ -1130,33 +1130,33 @@ class ResponseProcessor:
                     # Find the next tool tag
                     next_tag_start = -1
                     current_tag = None
-                    
+
                     # Find the earliest occurrence of any registered tag
                     for tag_name in self.tool_registry.xml_tools.keys():
                         start_pattern = f'<{tag_name}'
                         tag_pos = content.find(start_pattern, pos)
-                        
+
                         if tag_pos != -1 and (next_tag_start == -1 or tag_pos < next_tag_start):
                             next_tag_start = tag_pos
                             current_tag = tag_name
-                    
+
                     if next_tag_start == -1 or not current_tag:
                         break
-                    
+
                     # Find the matching end tag
                     end_pattern = f'</{current_tag}>'
                     tag_stack = []
                     chunk_start = next_tag_start
                     current_pos = next_tag_start
-                    
+
                     while current_pos < len(content):
                         # Look for next start or end tag of the same type
                         next_start = content.find(f'<{current_tag}', current_pos + 1)
                         next_end = content.find(end_pattern, current_pos)
-                        
+
                         if next_end == -1:  # No closing tag found
                             break
-                        
+
                         if next_start != -1 and next_start < next_end:
                             # Found nested start tag
                             tag_stack.append(next_start)
@@ -1173,22 +1173,22 @@ class ResponseProcessor:
                                 # Pop nested tag
                                 tag_stack.pop()
                                 current_pos = next_end + 1
-                    
+
                     if current_pos >= len(content):  # Reached end without finding closing tag
                         break
-                    
+
                     pos = max(pos + 1, current_pos)
-        
+
         except Exception as e:
             logger.error(f"Error extracting XML chunks: {e}")
             logger.error(f"Content was: {content}")
             self.trace.event(name="error_extracting_xml_chunks", level="ERROR", status_message=(f"Error extracting XML chunks: {e}"), metadata={"content": content})
-        
+
         return chunks
 
     def _parse_xml_tool_call(self, xml_chunk: str) -> Optional[Tuple[Dict[str, Any], Dict[str, Any]]]:
         """Parse XML chunk into tool call format and return parsing details.
-        
+
         Returns:
             Tuple of (tool_call, parsing_details) or None if parsing fails.
             - tool_call: Dict with 'function_name', 'xml_tag_name', 'arguments'
@@ -1199,28 +1199,28 @@ class ResponseProcessor:
             if '<function_calls>' in xml_chunk and '<invoke' in xml_chunk:
                 # Use the new XML parser
                 parsed_calls = self.xml_parser.parse_content(xml_chunk)
-                
+
                 if not parsed_calls:
                     logger.error(f"No tool calls found in XML chunk: {xml_chunk}")
                     return None
-                
+
                 # Take the first tool call (should only be one per chunk)
                 xml_tool_call = parsed_calls[0]
-                
+
                 # Convert to the expected format
                 tool_call = {
                     "function_name": xml_tool_call.function_name,
                     "xml_tag_name": xml_tool_call.function_name.replace('_', '-'),  # For backwards compatibility
                     "arguments": xml_tool_call.parameters
                 }
-                
+
                 # Include the parsing details
                 parsing_details = xml_tool_call.parsing_details
                 parsing_details["raw_xml"] = xml_tool_call.raw_xml
-                
+
                 logger.debug(f"Parsed new format tool call: {tool_call}")
                 return tool_call, parsing_details
-            
+
             # Fall back to old format parsing
             # Extract tag name and validate
             tag_match = re.match(r'<([^\s>]+)', xml_chunk)
@@ -1228,26 +1228,26 @@ class ResponseProcessor:
                 logger.error(f"No tag found in XML chunk: {xml_chunk}")
                 self.trace.event(name="no_tag_found_in_xml_chunk", level="ERROR", status_message=(f"No tag found in XML chunk: {xml_chunk}"))
                 return None
-            
+
             # This is the XML tag as it appears in the text (e.g., "create-file")
             xml_tag_name = tag_match.group(1)
             logger.info(f"Found XML tag: {xml_tag_name}")
             self.trace.event(name="found_xml_tag", level="DEFAULT", status_message=(f"Found XML tag: {xml_tag_name}"))
-            
+
             # Get tool info and schema from registry
             tool_info = self.tool_registry.get_xml_tool(xml_tag_name)
             if not tool_info or not tool_info['schema'].xml_schema:
                 logger.error(f"No tool or schema found for tag: {xml_tag_name}")
                 self.trace.event(name="no_tool_or_schema_found_for_tag", level="ERROR", status_message=(f"No tool or schema found for tag: {xml_tag_name}"))
                 return None
-            
+
             # This is the actual function name to call (e.g., "create_file")
             function_name = tool_info['method']
-            
+
             schema = tool_info['schema'].xml_schema
             params = {}
             remaining_chunk = xml_chunk
-            
+
             # --- Store detailed parsing info ---
             parsing_details = {
                 "attributes": {},
@@ -1257,7 +1257,7 @@ class ResponseProcessor:
                 "raw_chunk": xml_chunk # Store the original chunk for reference
             }
             # ---
-            
+
             # Process each mapping
             for mapping in schema.mappings:
                 try:
@@ -1269,7 +1269,7 @@ class ResponseProcessor:
                             params[mapping.param_name] = value
                             parsing_details["attributes"][mapping.param_name] = value # Store raw attribute
                             # logger.info(f"Found attribute {mapping.param_name}: {value}")
-                
+
                     elif mapping.node_type == "element":
                         # Extract element content
                         content, remaining_chunk = self._extract_tag_content(remaining_chunk, mapping.path)
@@ -1277,7 +1277,7 @@ class ResponseProcessor:
                             params[mapping.param_name] = content.strip()
                             parsing_details["elements"][mapping.param_name] = content.strip() # Store raw element content
                             # logger.info(f"Found element {mapping.param_name}: {content.strip()}")
-                
+
                     elif mapping.node_type == "text":
                         # Extract text content
                         content, _ = self._extract_tag_content(remaining_chunk, xml_tag_name)
@@ -1285,7 +1285,7 @@ class ResponseProcessor:
                             params[mapping.param_name] = content.strip()
                             parsing_details["text_content"] = content.strip() # Store raw text content
                             # logger.info(f"Found text content for {mapping.param_name}: {content.strip()}")
-                
+
                     elif mapping.node_type == "content":
                         # Extract root content
                         content, _ = self._extract_tag_content(remaining_chunk, xml_tag_name)
@@ -1293,7 +1293,7 @@ class ResponseProcessor:
                             params[mapping.param_name] = content.strip()
                             parsing_details["root_content"] = content.strip() # Store raw root content
                             # logger.info(f"Found root content for {mapping.param_name}")
-                
+
                 except Exception as e:
                     logger.error(f"Error processing mapping {mapping}: {e}")
                     self.trace.event(name="error_processing_mapping", level="ERROR", status_message=(f"Error processing mapping {mapping}: {e}"))
@@ -1305,10 +1305,10 @@ class ResponseProcessor:
                 "xml_tag_name": xml_tag_name,    # The original XML tag (e.g., create-file)
                 "arguments": params              # The extracted parameters
             }
-            
+
             # logger.debug(f"Parsed old format tool call: {tool_call["function_name"]}")
             return tool_call, parsing_details # Return both dicts
-            
+
         except Exception as e:
             logger.error(f"Error parsing XML chunk: {e}")
             logger.error(f"XML chunk was: {xml_chunk}")
@@ -1317,15 +1317,15 @@ class ResponseProcessor:
 
     def _parse_xml_tool_calls(self, content: str) -> List[Dict[str, Any]]:
         """Parse XML tool calls from content string.
-        
+
         Returns:
             List of dictionaries, each containing {'tool_call': ..., 'parsing_details': ...}
         """
         parsed_data = []
-        
+
         try:
             xml_chunks = self._extract_xml_chunks(content)
-            
+
             for xml_chunk in xml_chunks:
                 result = self._parse_xml_tool_call(xml_chunk)
                 if result:
@@ -1334,40 +1334,40 @@ class ResponseProcessor:
                         "tool_call": tool_call,
                         "parsing_details": parsing_details
                     })
-                    
+
         except Exception as e:
             logger.error(f"Error parsing XML tool calls: {e}", exc_info=True)
             self.trace.event(name="error_parsing_xml_tool_calls", level="ERROR", status_message=(f"Error parsing XML tool calls: {e}"), metadata={"content": content})
-        
+
         return parsed_data
 
     # Tool execution methods
     async def _execute_tool(self, tool_call: Dict[str, Any]) -> ToolResult:
         """Execute a single tool call and return the result."""
-        span = self.trace.span(name=f"execute_tool.{tool_call['function_name']}", input=tool_call["arguments"])            
+        span = self.trace.span(name=f"execute_tool.{tool_call['function_name']}", input=tool_call["arguments"])
         try:
             function_name = tool_call["function_name"]
             arguments = tool_call["arguments"]
 
             logger.info(f"Executing tool: {function_name} with arguments: {arguments}")
             self.trace.event(name="executing_tool", level="DEFAULT", status_message=(f"Executing tool: {function_name} with arguments: {arguments}"))
-            
+
             if isinstance(arguments, str):
                 try:
                     arguments = safe_json_parse(arguments)
                 except json.JSONDecodeError:
                     arguments = {"text": arguments}
-            
+
             # Get available functions from tool registry
             available_functions = self.tool_registry.get_available_functions()
-            
+
             # Look up the function by name
             tool_fn = available_functions.get(function_name)
             if not tool_fn:
                 logger.error(f"Tool function '{function_name}' not found in registry")
                 span.end(status_message="tool_not_found", level="ERROR")
                 return ToolResult(success=False, output=f"Tool function '{function_name}' not found")
-            
+
             logger.debug(f"Found tool function for '{function_name}', executing...")
             result = await tool_fn(**arguments)
             logger.info(f"Tool execution complete: {function_name} -> {result}")
@@ -1379,27 +1379,27 @@ class ResponseProcessor:
             return ToolResult(success=False, output=f"Error executing tool: {str(e)}")
 
     async def _execute_tools(
-        self, 
-        tool_calls: List[Dict[str, Any]], 
+        self,
+        tool_calls: List[Dict[str, Any]],
         execution_strategy: ToolExecutionStrategy = "sequential"
     ) -> List[Tuple[Dict[str, Any], ToolResult]]:
         """Execute tool calls with the specified strategy.
-        
+
         This is the main entry point for tool execution. It dispatches to the appropriate
         execution method based on the provided strategy.
-        
+
         Args:
             tool_calls: List of tool calls to execute
             execution_strategy: Strategy for executing tools:
                 - "sequential": Execute tools one after another, waiting for each to complete
-                - "parallel": Execute all tools simultaneously for better performance 
-                
+                - "parallel": Execute all tools simultaneously for better performance
+
         Returns:
             List of tuples containing the original tool call and its result
         """
         logger.info(f"Executing {len(tool_calls)} tools with strategy: {execution_strategy}")
         self.trace.event(name="executing_tools_with_strategy", level="DEFAULT", status_message=(f"Executing {len(tool_calls)} tools with strategy: {execution_strategy}"))
-            
+
         if execution_strategy == "sequential":
             return await self._execute_tools_sequentially(tool_calls)
         elif execution_strategy == "parallel":
@@ -1410,88 +1410,88 @@ class ResponseProcessor:
 
     async def _execute_tools_sequentially(self, tool_calls: List[Dict[str, Any]]) -> List[Tuple[Dict[str, Any], ToolResult]]:
         """Execute tool calls sequentially and return results.
-        
+
         This method executes tool calls one after another, waiting for each tool to complete
         before starting the next one. This is useful when tools have dependencies on each other.
-        
+
         Args:
             tool_calls: List of tool calls to execute
-            
+
         Returns:
             List of tuples containing the original tool call and its result
         """
         if not tool_calls:
             return []
-            
+
         try:
             tool_names = [t.get('function_name', 'unknown') for t in tool_calls]
             logger.info(f"Executing {len(tool_calls)} tools sequentially: {tool_names}")
             self.trace.event(name="executing_tools_sequentially", level="DEFAULT", status_message=(f"Executing {len(tool_calls)} tools sequentially: {tool_names}"))
-            
+
             results = []
             for index, tool_call in enumerate(tool_calls):
                 tool_name = tool_call.get('function_name', 'unknown')
                 logger.debug(f"Executing tool {index+1}/{len(tool_calls)}: {tool_name}")
-                
+
                 try:
                     result = await self._execute_tool(tool_call)
                     results.append((tool_call, result))
                     logger.debug(f"Completed tool {tool_name} with success={result.success}")
-                    
+
                     # Check if this is a terminating tool (ask or complete)
                     if tool_name in ['ask', 'complete']:
                         logger.info(f"Terminating tool '{tool_name}' executed. Stopping further tool execution.")
                         self.trace.event(name="terminating_tool_executed", level="DEFAULT", status_message=(f"Terminating tool '{tool_name}' executed. Stopping further tool execution."))
                         break  # Stop executing remaining tools
-                        
+
                 except Exception as e:
                     logger.error(f"Error executing tool {tool_name}: {str(e)}")
                     self.trace.event(name="error_executing_tool", level="ERROR", status_message=(f"Error executing tool {tool_name}: {str(e)}"))
                     error_result = ToolResult(success=False, output=f"Error executing tool: {str(e)}")
                     results.append((tool_call, error_result))
-            
+
             logger.info(f"Sequential execution completed for {len(results)} tools (out of {len(tool_calls)} total)")
             self.trace.event(name="sequential_execution_completed", level="DEFAULT", status_message=(f"Sequential execution completed for {len(results)} tools (out of {len(tool_calls)} total)"))
             return results
-            
+
         except Exception as e:
             logger.error(f"Error in sequential tool execution: {str(e)}", exc_info=True)
             # Return partial results plus error results for remaining tools
             completed_tool_names = [r[0].get('function_name', 'unknown') for r in results] if 'results' in locals() else []
             remaining_tools = [t for t in tool_calls if t.get('function_name', 'unknown') not in completed_tool_names]
-            
+
             # Add error results for remaining tools
-            error_results = [(tool, ToolResult(success=False, output=f"Execution error: {str(e)}")) 
+            error_results = [(tool, ToolResult(success=False, output=f"Execution error: {str(e)}"))
                             for tool in remaining_tools]
-                            
+
             return (results if 'results' in locals() else []) + error_results
 
     async def _execute_tools_in_parallel(self, tool_calls: List[Dict[str, Any]]) -> List[Tuple[Dict[str, Any], ToolResult]]:
         """Execute tool calls in parallel and return results.
-        
+
         This method executes all tool calls simultaneously using asyncio.gather, which
         can significantly improve performance when executing multiple independent tools.
-        
+
         Args:
             tool_calls: List of tool calls to execute
-            
+
         Returns:
             List of tuples containing the original tool call and its result
         """
         if not tool_calls:
             return []
-            
+
         try:
             tool_names = [t.get('function_name', 'unknown') for t in tool_calls]
             logger.info(f"Executing {len(tool_calls)} tools in parallel: {tool_names}")
             self.trace.event(name="executing_tools_in_parallel", level="DEFAULT", status_message=(f"Executing {len(tool_calls)} tools in parallel: {tool_names}"))
-            
+
             # Create tasks for all tool calls
             tasks = [self._execute_tool(tool_call) for tool_call in tool_calls]
-            
+
             # Execute all tasks concurrently with error handling
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             # Process results and handle any exceptions
             processed_results = []
             for i, (tool_call, result) in enumerate(zip(tool_calls, results)):
@@ -1503,34 +1503,34 @@ class ResponseProcessor:
                     processed_results.append((tool_call, error_result))
                 else:
                     processed_results.append((tool_call, result))
-            
+
             logger.info(f"Parallel execution completed for {len(tool_calls)} tools")
             self.trace.event(name="parallel_execution_completed", level="DEFAULT", status_message=(f"Parallel execution completed for {len(tool_calls)} tools"))
             return processed_results
-        
+
         except Exception as e:
             logger.error(f"Error in parallel tool execution: {str(e)}", exc_info=True)
             self.trace.event(name="error_in_parallel_tool_execution", level="ERROR", status_message=(f"Error in parallel tool execution: {str(e)}"))
             # Return error results for all tools if the gather itself fails
-            return [(tool_call, ToolResult(success=False, output=f"Execution error: {str(e)}")) 
+            return [(tool_call, ToolResult(success=False, output=f"Execution error: {str(e)}"))
                     for tool_call in tool_calls]
 
     async def _add_tool_result(
-        self, 
-        thread_id: str, 
-        tool_call: Dict[str, Any], 
+        self,
+        thread_id: str,
+        tool_call: Dict[str, Any],
         result: ToolResult,
         strategy: Union[XmlAddingStrategy, str] = "assistant_message",
         assistant_message_id: Optional[str] = None,
         parsing_details: Optional[Dict[str, Any]] = None
     ) -> Optional[Dict[str, Any]]: # Return the full message object
         """Add a tool result to the conversation thread based on the specified format.
-        
+
         This method formats tool results and adds them to the conversation history,
-        making them visible to the LLM in subsequent interactions. Results can be 
+        making them visible to the LLM in subsequent interactions. Results can be
         added either as native tool messages (OpenAI format) or as XML-wrapped content
         with a specified role (user or assistant).
-        
+
         Args:
             thread_id: ID of the conversation thread
             tool_call: The original tool call that produced this result
@@ -1542,26 +1542,26 @@ class ResponseProcessor:
         """
         try:
             message_obj = None # Initialize message_obj
-            
+
             # Create metadata with assistant_message_id if provided
             metadata = {}
             if assistant_message_id:
                 metadata["assistant_message_id"] = assistant_message_id
                 logger.info(f"Linking tool result to assistant message: {assistant_message_id}")
                 self.trace.event(name="linking_tool_result_to_assistant_message", level="DEFAULT", status_message=(f"Linking tool result to assistant message: {assistant_message_id}"))
-            
+
             # --- Add parsing details to metadata if available ---
             if parsing_details:
                 metadata["parsing_details"] = parsing_details
                 logger.info("Adding parsing_details to tool result metadata")
                 self.trace.event(name="adding_parsing_details_to_tool_result_metadata", level="DEFAULT", status_message=(f"Adding parsing_details to tool result metadata"), metadata={"parsing_details": parsing_details})
             # ---
-            
+
             # Check if this is a native function call (has id field)
             if "id" in tool_call:
                 # Format as a proper tool message according to OpenAI spec
                 function_name = tool_call.get("function_name", "")
-                
+
                 # Format the tool result content - tool role needs string content
                 if isinstance(result, str):
                     content = result
@@ -1576,10 +1576,10 @@ class ResponseProcessor:
                 else:
                     # Fallback to string representation of the whole result
                     content = str(result)
-                
+
                 logger.info(f"Formatted tool result content: {content[:100]}...")
                 self.trace.event(name="formatted_tool_result_content", level="DEFAULT", status_message=(f"Formatted tool result content: {content[:100]}..."))
-                
+
                 # Create the tool response message with proper format
                 tool_message = {
                     "role": "tool",
@@ -1587,10 +1587,10 @@ class ResponseProcessor:
                     "name": function_name,
                     "content": content
                 }
-                
+
                 logger.info(f"Adding native tool result for tool_call_id={tool_call['id']} with role=tool")
                 self.trace.event(name="adding_native_tool_result_for_tool_call_id", level="DEFAULT", status_message=(f"Adding native tool result for tool_call_id={tool_call['id']} with role=tool"))
-                
+
                 # Add as a tool message to the conversation history
                 # This makes the result visible to the LLM in the next turn
                 message_obj = await self.add_message(
@@ -1601,10 +1601,10 @@ class ResponseProcessor:
                     metadata=metadata
                 )
                 return message_obj # Return the full message object
-            
+
             # Check if this is an MCP tool (function_name starts with "call_mcp_tool")
             function_name = tool_call.get("function_name", "")
-            
+
             # Check if this is an MCP tool - either the old call_mcp_tool or a dynamically registered MCP tool
             is_mcp_tool = False
             if function_name == "call_mcp_tool":
@@ -1618,42 +1618,42 @@ class ResponseProcessor:
                     # Also check for MCP metadata in JSON format
                     elif "mcp_metadata" in result.output:
                         is_mcp_tool = True
-            
+
             if is_mcp_tool:
                 # Special handling for MCP tools - make content prominent and LLM-friendly
                 result_role = "user" if strategy == "user_message" else "assistant"
-                
+
                 # Extract the actual content from the ToolResult
                 if hasattr(result, 'output'):
                     mcp_content = str(result.output)
                 else:
                     mcp_content = str(result)
-                
+
                 # Create a simple, LLM-friendly message format that puts content first
                 simple_message = {
                     "role": result_role,
                     "content": mcp_content  # Direct content, no complex nesting
                 }
-                
+
                 logger.info(f"Adding MCP tool result with simplified format for LLM visibility")
                 self.trace.event(name="adding_mcp_tool_result_simplified", level="DEFAULT", status_message="Adding MCP tool result with simplified format for LLM visibility")
-                
+
                 message_obj = await self.add_message(
-                    thread_id=thread_id, 
+                    thread_id=thread_id,
                     type="tool",
                     content=simple_message,
                     is_llm_message=True,
                     metadata=metadata
                 )
                 return message_obj
-            
+
             # For XML and other non-native tools, use the new structured format
             # Determine message role based on strategy
             result_role = "user" if strategy == "user_message" else "assistant"
-            
+
             # Create the new structured tool result format
             structured_result = self._create_structured_tool_result(tool_call, result, parsing_details)
-            
+
             # Add the message with the appropriate role to the conversation history
             # This allows the LLM to see the tool result in subsequent interactions
             result_message = {
@@ -1661,7 +1661,7 @@ class ResponseProcessor:
                 "content":  json.dumps(structured_result)
             }
             message_obj = await self.add_message(
-                thread_id=thread_id, 
+                thread_id=thread_id,
                 type="tool",
                 content=result_message,
                 is_llm_message=True,
@@ -1678,8 +1678,8 @@ class ResponseProcessor:
                     "content": str(result)
                 }
                 message_obj = await self.add_message(
-                    thread_id=thread_id, 
-                    type="tool", 
+                    thread_id=thread_id,
+                    type="tool",
                     content=fallback_message,
                     is_llm_message=True,
                     metadata={"assistant_message_id": assistant_message_id} if assistant_message_id else {}
@@ -1692,12 +1692,12 @@ class ResponseProcessor:
 
     def _create_structured_tool_result(self, tool_call: Dict[str, Any], result: ToolResult, parsing_details: Optional[Dict[str, Any]] = None):
         """Create a structured tool result format that's tool-agnostic and provides rich information.
-        
+
         Args:
             tool_call: The original tool call that was executed
             result: The result from the tool execution
             parsing_details: Optional parsing details for XML calls
-            
+
         Returns:
             Structured dictionary containing tool execution information
         """
@@ -1707,7 +1707,7 @@ class ResponseProcessor:
         arguments = tool_call.get("arguments", {})
         tool_call_id = tool_call.get("id")
         logger.info(f"Creating structured tool result for tool_call: {tool_call}")
-        
+
         # Process the output - if it's a JSON string, parse it back to an object
         output = result.output if hasattr(result, 'output') else str(result)
         if isinstance(output, str):
@@ -1721,7 +1721,7 @@ class ResponseProcessor:
             except Exception:
                 # If parsing fails, keep the original string
                 pass
-        
+
         # Create the structured result
         structured_result_v1 = {
             "tool_execution": {
@@ -1739,22 +1739,22 @@ class ResponseProcessor:
                 #     "parsing_details": parsing_details
                 # }
             }
-        } 
+        }
 
         # STRUCTURED_OUTPUT_TOOLS = {
-        #     "str_replace", 
+        #     "str_replace",
         #     "get_data_provider_endpoints",
         # }
 
         # summary_output = result.output if hasattr(result, 'output') else str(result)
-        
+
         # if xml_tag_name:
         #     status = "completed successfully" if structured_result_v1["tool_execution"]["result"]["success"] else "failed"
         #     summary = f"Tool '{xml_tag_name}' {status}. Output: {summary_output}"
         # else:
         #     status = "completed successfully" if structured_result_v1["tool_execution"]["result"]["success"] else "failed"
         #     summary = f"Function '{function_name}' {status}. Output: {summary_output}"
-        
+
         # if self.is_agent_builder:
         #     return summary
         # if function_name in STRUCTURED_OUTPUT_TOOLS:
@@ -1764,7 +1764,7 @@ class ResponseProcessor:
 
         summary_output = result.output if hasattr(result, 'output') else str(result)
         success_status = structured_result_v1["tool_execution"]["result"]["success"]
-        
+
         # # Create a more comprehensive summary for the LLM
         # if xml_tag_name:
         #     status = "completed successfully" if structured_result_v1["tool_execution"]["result"]["success"] else "failed"
@@ -1772,18 +1772,18 @@ class ResponseProcessor:
         # else:
         #     status = "completed successfully" if structured_result_v1["tool_execution"]["result"]["success"] else "failed"
         #     summary = f"Function '{function_name}' {status}. Output: {summary_output}"
-        
+
         # if self.is_agent_builder:
         #     return summary
         # elif function_name == "get_data_provider_endpoints":
         #     logger.info(f"Returning sumnary for data provider call: {summary}")
         #     return summary
-            
+
         return structured_result_v1
 
     def _format_xml_tool_result(self, tool_call: Dict[str, Any], result: ToolResult) -> str:
         """Format a tool result wrapped in a <tool_result> tag.
-        
+
         DEPRECATED: This method is kept for backwards compatibility.
         New implementations should use _create_structured_tool_result instead.
 
@@ -1798,7 +1798,7 @@ class ResponseProcessor:
         if "xml_tag_name" in tool_call:
             xml_tag_name = tool_call["xml_tag_name"]
             return f"<tool_result> <{xml_tag_name}> {str(result)} </{xml_tag_name}> </tool_result>"
-        
+
         # Non-XML tool, just return the function result
         function_name = tool_call["function_name"]
         return f"Result for {function_name}: {str(result)}"
@@ -1811,7 +1811,7 @@ class ResponseProcessor:
             assistant_message_id=assistant_message_id,
             parsing_details=parsing_details
         )
-        
+
         # Set function_name and xml_tag_name fields
         if "xml_tag_name" in tool_call:
             context.xml_tag_name = tool_call["xml_tag_name"]
@@ -1820,9 +1820,9 @@ class ResponseProcessor:
             # For non-XML tools, use function name directly
             context.function_name = tool_call.get("function_name", "unknown")
             context.xml_tag_name = None
-        
+
         return context
-        
+
     async def _yield_and_save_tool_started(self, context: ToolExecutionContext, thread_id: str, thread_run_id: str) -> Optional[Dict[str, Any]]:
         """Formats, saves, and returns a tool started status message."""
         tool_name = context.xml_tag_name or context.function_name
@@ -1858,7 +1858,7 @@ class ResponseProcessor:
         # Add the *actual* tool result message ID to the metadata if available and successful
         if context.result.success and tool_message_id:
             metadata["linked_tool_result_message_id"] = tool_message_id
-            
+
         # <<< ADDED: Signal if this is a terminating tool >>>
         if context.function_name in ['ask', 'complete']:
             metadata["agent_should_terminate"] = True

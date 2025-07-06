@@ -14,6 +14,8 @@ from app.tool.mcp import MCPClients, MCPClientTool
 from app.tool.python_execute import PythonExecute
 from app.tool.str_replace_editor import StrReplaceEditor
 
+from app.tool.computer_use_tool import ComputerUseTool
+from app.daytona.sandbox import create_sandbox
 
 class Manus(ToolCallAgent):
     """A versatile general-purpose agent with support for both local and MCP tools."""
@@ -61,8 +63,15 @@ class Manus(ToolCallAgent):
         """Factory method to create and properly initialize a Manus instance."""
         instance = cls(**kwargs)
         await instance.initialize_mcp_servers()
+        instance.initialize_sandbox_tools()
         instance._initialized = True
         return instance
+
+    def initialize_sandbox_tools(self,password="123456") -> None:
+        sandbox = create_sandbox(password=password)
+        computer_tool = ComputerUseTool.create_with_sandbox(sandbox)
+        sandbox_tools=[computer_tool]
+        self.available_tools.add_tools(*sandbox_tools)
 
     async def initialize_mcp_servers(self) -> None:
         """Initialize connections to configured MCP servers."""
