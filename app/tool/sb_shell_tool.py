@@ -1,8 +1,9 @@
+import asyncio
 from typing import Optional, Dict, Any, TypeVar
 import time
 from uuid import uuid4
 from app.tool.base import ToolResult
-from app.daytona.tool_base import SandboxToolsBase
+from app.daytona.tool_base import SandboxToolsBase, Sandbox
 from app.utils.logger import logger
 
 Context = TypeVar("Context")
@@ -75,6 +76,12 @@ class SandboxShellTool(SandboxToolsBase):
             "list_commands": []
         },
     }
+
+    def __init__(self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data):
+        """Initialize with optional sandbox and thread_id."""
+        super().__init__(**data)
+        if sandbox is not None:
+            self._sandbox = sandbox
 
     async def _ensure_session(self, session_name: str = "default") -> str:
         """Ensure a session exists and return its ID."""
@@ -334,7 +341,7 @@ class SandboxShellTool(SandboxToolsBase):
         Returns:
             ToolResult with the action's output or error
         """
-        async with self.lock:
+        async with asyncio.Lock():
             try:
                 # Navigation actions
                 if action == "execute_command":
@@ -356,6 +363,7 @@ class SandboxShellTool(SandboxToolsBase):
             except Exception as e:
                 logger.error(f"Error executing shell action: {e}")
                 return self.fail_response(f"Error executing shell action: {e}")
+
 
     async def cleanup(self):
         """Clean up all sessions."""
