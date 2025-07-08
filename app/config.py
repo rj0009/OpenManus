@@ -108,8 +108,8 @@ class SandboxSettings(BaseModel):
 class DaytonaSettings(BaseModel):
     daytona_api_key: str
     daytona_server_url: Optional[str] = Field("https://app.daytona.io/api", description="")
-    daytona_target: Optional[str] = Field("asia", description="enum ['asia', 'eu', 'us']")
-    sandbox_image_name: Optional[str]= Field("daytonaio/sandbox:0.4.1", description="")
+    daytona_target: Optional[str] = Field("us", description="enum ['asia', 'eu', 'us']")
+    sandbox_image_name: Optional[str]= Field("kortix/suna:0.1.3", description="")
     sandbox_entrypoint: Optional[str]= Field("/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf", description="")
 
 class MCPServerConfig(BaseModel):

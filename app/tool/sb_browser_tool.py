@@ -3,16 +3,18 @@ import json
 import base64
 import io
 from PIL import Image
-
+import asyncio
+from typing import Optional  # Add this import for Optional
+from app.daytona.tool_base import Sandbox  # Ensure Sandbox is imported correctly
 # from app.agentpress.tool import ToolResult, openapi_schema, xml_schema
 from app.tool.base import ToolResult
-from app.agentpress.thread_manager import ThreadManager
+# from app.agentpress.thread_manager import ThreadManager
 from app.daytona.tool_base import SandboxToolsBase
 from app.utils.logger import logger
-from app.utils.s3_upload_utils import upload_base64_image
+#from app.utils.s3_upload_utils import upload_base64_image
 
 
-Context = TypeVar("Context")
+# Context = TypeVar("Context")
 _BROWSER_DESCRIPTION = """\
 A sandbox-based browser automation tool that allows interaction with web pages through various actions.
 * This tool provides commands for controlling a browser session in a sandboxed environment
@@ -27,6 +29,8 @@ Key capabilities include:
 * Content extraction: Get dropdown options or select dropdown options
 """
 class SandboxBrowserTool(SandboxToolsBase):
+    """Tool for executing tasks in a Daytona sandbox with browser-use capabilities."""
+
     name: str = "sandbox_browser"
     description: str = _BROWSER_DESCRIPTION
     parameters: dict = {
@@ -116,10 +120,14 @@ class SandboxBrowserTool(SandboxToolsBase):
             "wait": ["seconds"],
         },
     }
-    def __init__(self, project_id: str, thread_id: str, thread_manager: ThreadManager):
-        super().__init__(project_id=project_id, thread_manager=thread_manager)
-        self.thread_id = thread_id
-        self.lock = asyncio.Lock()
+    def __init__(self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data):
+        """Initialize with optional sandbox and thread_id."""
+        super().__init__(**data)
+        if sandbox is not None:
+            self._sandbox = sandbox  # Directly set the base class private attribute
+            # self.api_base_url = sandbox.get_preview_link(8003)  # Set API base URL for browser automation
+            # logger.info(f"Initialized SandboxBrowserTool with API URL: {self.api_base_url}")
+
     def _validate_base64_image(self, base64_string: str, max_size_mb: int = 10) -> tuple[bool, str]:
         """
         Validate base64 image data.
@@ -190,28 +198,28 @@ class SandboxBrowserTool(SandboxToolsBase):
                     result = json.loads(response.result)
                     result.setdefault("content", "")
                     result.setdefault("role", "assistant")
-                    if "screenshot_base64" in result:
-                        screenshot_data = result["screenshot_base64"]
-                        is_valid, validation_message = self._validate_base64_image(screenshot_data)
-                        if is_valid:
-                            image_url = await upload_base64_image(screenshot_data)
-                            result["image_url"] = image_url
-                        else:
-                            logger.warning(f"Screenshot validation failed: {validation_message}")
-                            result["image_validation_error"] = validation_message
-                        del result["screenshot_base64"]
-                    added_message = await self.thread_manager.add_message(
-                        thread_id=self.thread_id,
-                        type="browser_state",
-                        content=result,
-                        is_llm_message=False
-                    )
+            #         if "screenshot_base64" in result:
+            #             screenshot_data = result["screenshot_base64"]
+            #             is_valid, validation_message = self._validate_base64_image(screenshot_data)
+            #             if is_valid:
+            #                 image_url = await upload_base64_image(screenshot_data)
+            #                 result["image_url"] = image_url
+            #             else:
+            #                 logger.warning(f"Screenshot validation failed: {validation_message}")
+            #                 result["image_validation_error"] = validation_message
+            #             del result["screenshot_base64"]
+            #         added_message = await self.thread_manager.add_message(
+            #             thread_id=self.thread_id,
+            #             type="browser_state",
+            #             content=result,
+            #             is_llm_message=False
+            #         )
                     success_response = {
                         "success": result.get("success", False),
                         "message": result.get("message", "Browser action completed")
                     }
-                    if added_message and 'message_id' in added_message:
-                        success_response['message_id'] = added_message['message_id']
+            #         if added_message and 'message_id' in added_message:
+            #             success_response['message_id'] = added_message['message_id']
                     for field in ["url", "title", "element_count", "pixels_below", "ocr_text", "image_url"]:
                         if field in result:
                             success_response[field] = result[field]
@@ -260,85 +268,85 @@ class SandboxBrowserTool(SandboxToolsBase):
         Returns:
             ToolResult with the action's output or error
         """
-        async with self.lock:
-            try:
+        # async with self.lock:
+        try:
                 # Navigation actions
-                if action == "navigate_to":
-                    if not url:
-                        return self.fail_response("URL is required for navigation")
-                    return await self._execute_browser_action("navigate_to", {"url": url})
-                elif action == "go_back":
-                    return await self._execute_browser_action("go_back", {})
+            if action == "navigate_to":
+                if not url:
+                    return self.fail_response("URL is required for navigation")
+                return await self._execute_browser_action("navigate_to", {"url": url})
+            elif action == "go_back":
+                return await self._execute_browser_action("go_back", {})
                 # Interaction actions
-                elif action == "click_element":
-                    if index is None:
-                        return self.fail_response("Index is required for click_element")
-                    return await self._execute_browser_action("click_element", {"index": index})
-                elif action == "input_text":
-                    if index is None or not text:
-                        return self.fail_response("Index and text are required for input_text")
-                    return await self._execute_browser_action("input_text", {"index": index, "text": text})
-                elif action == "send_keys":
-                    if not keys:
-                        return self.fail_response("Keys are required for send_keys")
-                    return await self._execute_browser_action("send_keys", {"keys": keys})
+            elif action == "click_element":
+                if index is None:
+                    return self.fail_response("Index is required for click_element")
+                return await self._execute_browser_action("click_element", {"index": index})
+            elif action == "input_text":
+                if index is None or not text:
+                    return self.fail_response("Index and text are required for input_text")
+                return await self._execute_browser_action("input_text", {"index": index, "text": text})
+            elif action == "send_keys":
+                if not keys:
+                    return self.fail_response("Keys are required for send_keys")
+                return await self._execute_browser_action("send_keys", {"keys": keys})
                 # Tab management
-                elif action == "switch_tab":
-                    if page_id is None:
-                        return self.fail_response("Page ID is required for switch_tab")
-                    return await self._execute_browser_action("switch_tab", {"page_id": page_id})
-                elif action == "close_tab":
-                    if page_id is None:
-                        return self.fail_response("Page ID is required for close_tab")
-                    return await self._execute_browser_action("close_tab", {"page_id": page_id})
+            elif action == "switch_tab":
+                if page_id is None:
+                    return self.fail_response("Page ID is required for switch_tab")
+                return await self._execute_browser_action("switch_tab", {"page_id": page_id})
+            elif action == "close_tab":
+                if page_id is None:
+                    return self.fail_response("Page ID is required for close_tab")
+                return await self._execute_browser_action("close_tab", {"page_id": page_id})
                 # Scrolling actions
-                elif action == "scroll_down":
-                    params = {"amount": amount} if amount is not None else {}
-                    return await self._execute_browser_action("scroll_down", params)
-                elif action == "scroll_up":
-                    params = {"amount": amount} if amount is not None else {}
-                    return await self._execute_browser_action("scroll_up", params)
-                elif action == "scroll_to_text":
-                    if not text:
-                        return self.fail_response("Text is required for scroll_to_text")
-                    return await self._execute_browser_action("scroll_to_text", {"text": text})
-                # Dropdown actions
-                elif action == "get_dropdown_options":
-                    if index is None:
-                        return self.fail_response("Index is required for get_dropdown_options")
-                    return await self._execute_browser_action("get_dropdown_options", {"index": index})
-                elif action == "select_dropdown_option":
-                    if index is None or not text:
-                        return self.fail_response("Index and text are required for select_dropdown_option")
-                    return await self._execute_browser_action("select_dropdown_option", {"index": index, "text": text})
+            elif action == "scroll_down":
+                params = {"amount": amount} if amount is not None else {}
+                return await self._execute_browser_action("scroll_down", params)
+            elif action == "scroll_up":
+                params = {"amount": amount} if amount is not None else {}
+                return await self._execute_browser_action("scroll_up", params)
+            elif action == "scroll_to_text":
+                if not text:
+                    return self.fail_response("Text is required for scroll_to_text")
+                return await self._execute_browser_action("scroll_to_text", {"text": text})
+            # Dropdown actions
+            elif action == "get_dropdown_options":
+                if index is None:
+                    return self.fail_response("Index is required for get_dropdown_options")
+                return await self._execute_browser_action("get_dropdown_options", {"index": index})
+            elif action == "select_dropdown_option":
+                if index is None or not text:
+                    return self.fail_response("Index and text are required for select_dropdown_option")
+                return await self._execute_browser_action("select_dropdown_option", {"index": index, "text": text})
                 # Coordinate-based actions
-                elif action == "click_coordinates":
-                    if x is None or y is None:
-                        return self.fail_response("X and Y coordinates are required for click_coordinates")
-                    return await self._execute_browser_action("click_coordinates", {"x": x, "y": y})
-                elif action == "drag_drop":
-                    if not element_source or not element_target:
-                        return self.fail_response("Source and target elements are required for drag_drop")
-                    return await self._execute_browser_action("drag_drop", {
-                        "element_source": element_source,
-                        "element_target": element_target
-                    })
-                # Utility actions
-                elif action == "wait":
-                    seconds_to_wait = seconds if seconds is not None else 3
-                    return await self._execute_browser_action("wait", {"seconds": seconds_to_wait})
-                else:
-                    return self.fail_response(f"Unknown action: {action}")
-            except Exception as e:
-                logger.error(f"Error executing browser action: {e}")
-                return self.fail_response(f"Error executing browser action: {e}")
-    async def cleanup(self):
-        """Clean up sandbox resources."""
-        pass
-    @classmethod
-    def create_with_context(cls, context: Context) -> "SandboxBrowserTool[Context]":
-        """Factory method to create a SandboxBrowserTool with a specific context."""
-        raise NotImplementedError("create_with_context not implemented for SandboxBrowserTool")
+            elif action == "click_coordinates":
+                if x is None or y is None:
+                    return self.fail_response("X and Y coordinates are required for click_coordinates")
+                return await self._execute_browser_action("click_coordinates", {"x": x, "y": y})
+            elif action == "drag_drop":
+                if not element_source or not element_target:
+                    return self.fail_response("Source and target elements are required for drag_drop")
+                return await self._execute_browser_action("drag_drop", {
+                    "element_source": element_source,
+                    "element_target": element_target
+                })
+            # Utility actions
+            elif action == "wait":
+                seconds_to_wait = seconds if seconds is not None else 3
+                return await self._execute_browser_action("wait", {"seconds": seconds_to_wait})
+            else:
+                return self.fail_response(f"Unknown action: {action}")
+        except Exception as e:
+            logger.error(f"Error executing browser action: {e}")
+            return self.fail_response(f"Error executing browser action: {e}")
+    # async def cleanup(self):
+    #     """Clean up sandbox resources."""
+    #     pass
+    # @classmethod
+    # def create_with_context(cls, context: Context) -> "SandboxBrowserTool[Context]":
+    #     """Factory method to create a SandboxBrowserTool with a specific context."""
+    #     raise NotImplementedError("create_with_context not implemented for SandboxBrowserTool")
 
 
 # class SandboxBrowserTool(SandboxToolsBase):
@@ -350,7 +358,7 @@ class SandboxBrowserTool(SandboxToolsBase):
 
 #     def _validate_base64_image(self, base64_string: str, max_size_mb: int = 10) -> tuple[bool, str]:
 #         """
-#         Comprehensive validation of base64 image data.
+#         Comprehensive validation of base64 image data
 
 #         Args:
 #             base64_string (str): The base64 encoded image data
@@ -1380,3 +1388,8 @@ class SandboxBrowserTool(SandboxToolsBase):
 #         """
 #         logger.debug(f"\033[95mClicking at coordinates: ({x}, {y})\033[0m")
 #         return await self._execute_browser_action("click_coordinates", {"x": x, "y": y})
+
+    @classmethod
+    def create_with_sandbox(cls, sandbox: Sandbox) -> "SandboxBrowserTool":
+        """Factory method to create a tool with sandbox."""
+        return cls(sandbox=sandbox)

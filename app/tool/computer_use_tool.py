@@ -780,7 +780,7 @@ class ComputerUseTool(SandboxToolsBase):
         super().__init__(**data)
         if sandbox is not None:
             self._sandbox = sandbox  # 直接操作基类的私有属性
-            self.api_base_url = sandbox.get_preview_link(8000)
+            self.api_base_url = sandbox.get_preview_link(8000).url
             logging.info(f"Initialized ComputerUseTool with API URL: {self.api_base_url}")
 
     @classmethod
