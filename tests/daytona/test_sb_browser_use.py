@@ -13,12 +13,27 @@ async def main():
         target="us"
     )
     daytona = Daytona(config)
-    sandbox = daytona.find_one("84fd0b0c-de80-4d2f-b395-e27317248655")
-    sandbox.start()
+    sandbox = daytona.find_one("201415a9-28ad-4b6d-8756-13b1e34a70c3")
+    if sandbox.state == "archived" or sandbox.state == "stopped":
+        logger.info(f"Sandbox is in {sandbox.state} state. Starting...")
+        try:
+            daytona.start(sandbox)
+            start_supervisord_session(sandbox)
+            # Wait a moment for the sandbox to initialize
+            # sleep(5)
+            # Refresh sandbox state after starting
+            # sandbox = daytona.get(sandbox.id)
+        except Exception as e:
+            logger.error(f"Error starting sandbox: {e}")
+            raise e
+
+    # sandbox.start()
     vnc_link = sandbox.get_preview_link(6080)
     website_link = sandbox.get_preview_link(8080)
+    computer_link = sandbox.get_preview_link(8000)
     print(f"VNC Link: {vnc_link}")
     print(f"Website Link: {website_link}")
+    print(f"Computer Link: {computer_link}")
     # sandbox.start()
     # base_url=sandbox.get_preview_link(8000)
     # print(f"Sandbox base URL: {base_url}")
@@ -27,7 +42,7 @@ async def main():
     tool = SandboxBrowserTool(sandbox)
 
     # # 执行截图操作
-    result = await tool.execute(action="navigate_to",url="https://www.google.com")
+    result,tooresult = await tool.execute(action="navigate_to",url="https://www.github.com")
     print(result)
 
     # endpoint = "navigate_to"

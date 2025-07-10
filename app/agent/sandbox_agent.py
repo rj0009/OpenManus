@@ -14,14 +14,14 @@ from app.tool.mcp import MCPClients, MCPClientTool
 from app.tool.python_execute import PythonExecute
 from app.tool.str_replace_editor import StrReplaceEditor
 
-from app.tool.computer_use_tool import ComputerUseTool
+from app.tool.sb_browser_tool import SandboxBrowserTool
 from app.daytona.sandbox import create_sandbox
 
-class Manus(ToolCallAgent):
+class SandboxManus(ToolCallAgent):
     """A versatile general-purpose agent with support for both local and MCP tools."""
 
-    name: str = "Manus"
-    description: str = "A versatile agent that can solve various tasks using multiple tools including MCP-based tools"
+    name: str = "SandboxManus"
+    description: str = "A versatile agent that can solve various tasks using multiple sandbox-tools including MCP-based tools"
 
     system_prompt: str = SYSTEM_PROMPT.format(directory=config.workspace_root)
     next_step_prompt: str = NEXT_STEP_PROMPT
@@ -35,9 +35,9 @@ class Manus(ToolCallAgent):
     # Add general-purpose tools to the tool collection
     available_tools: ToolCollection = Field(
         default_factory=lambda: ToolCollection(
-            PythonExecute(),
-            BrowserUseTool(),
-            StrReplaceEditor(),
+            # PythonExecute(),
+            # BrowserUseTool(),
+            # StrReplaceEditor(),
             AskHuman(),
             Terminate(),
         )
@@ -63,8 +63,15 @@ class Manus(ToolCallAgent):
         """Factory method to create and properly initialize a Manus instance."""
         instance = cls(**kwargs)
         await instance.initialize_mcp_servers()
+        instance.initialize_sandbox_tools()
         instance._initialized = True
         return instance
+
+    def initialize_sandbox_tools(self,password="123456") -> None:
+        sandbox = create_sandbox(password=password)
+        computer_tool = SandboxBrowserTool.create_with_sandbox(sandbox)
+        sandbox_tools=[computer_tool]
+        self.available_tools.add_tools(*sandbox_tools)
 
     async def initialize_mcp_servers(self) -> None:
         """Initialize connections to configured MCP servers."""

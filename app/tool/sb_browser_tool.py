@@ -223,7 +223,7 @@ class SandboxBrowserTool(SandboxToolsBase):
                     for field in ["url", "title", "element_count", "pixels_below", "ocr_text", "image_url"]:
                         if field in result:
                             success_response[field] = result[field]
-                    return self.success_response(success_response) if success_response["success"] else self.fail_response(success_response)
+                    return (result,self.success_response(success_response)) if success_response["success"] else self.fail_response(success_response)
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse response JSON: {e}")
                     return self.fail_response(f"Failed to parse response JSON: {e}")
