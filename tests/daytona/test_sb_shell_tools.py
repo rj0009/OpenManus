@@ -5,18 +5,24 @@ import asyncio
 async def main():
     # 创建沙箱和工具
     sandbox = create_sandbox(password="123456")
-    base_url=sandbox.get_preview_link(8000)
-    print(f"Sandbox base URL: {base_url}")
+    # base_url=sandbox.get_preview_link(8000)
+    # print(f"Sandbox base URL: {base_url}")
 
     print(f"Sandbox ID: {sandbox.id}")
-    sb_shell_tool = SandboxShellTool.create_with_sandbox(sandbox)
+
+    vnc_link = sandbox.get_preview_link(6080)
+    website_link = sandbox.get_preview_link(8080)
+    print(f"VNC Link: {vnc_link}")
+    print(f"Website Link: {website_link}")
+    sb_shell_tool = SandboxShellTool(sandbox)
+
 
     # 执行截图操作
-    result = await sb_shell_tool.execute(action="execute_command", command="ls")
+    result = await sb_shell_tool.execute(action="execute_command", command="pwd")
     print(result)
 
     # 清理资源（可选）
-    await sb_shell_tool.cleanup()
+    # await sb_shell_tool.cleanup()
 
 if __name__ == "__main__":
     print("123")
