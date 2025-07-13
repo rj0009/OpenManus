@@ -1,4 +1,5 @@
-from typing import Dict, List, Optional
+import json
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from pydantic import Field, model_validator
 
@@ -7,6 +8,7 @@ from app.agent.toolcall import ToolCallAgent
 from app.config import config
 from app.logger import logger
 from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
+from app.schema import Message
 from app.tool import Terminate, ToolCollection
 from app.tool.ask_human import AskHuman
 from app.tool.browser_use_tool import BrowserUseTool
@@ -53,13 +55,13 @@ class SandboxManus(ToolCallAgent):
     _initialized: bool = False
 
     @model_validator(mode="after")
-    def initialize_helper(self) -> "Manus":
+    def initialize_helper(self) -> "SandboxManus":
         """Initialize basic components synchronously."""
         self.browser_context_helper = BrowserContextHelper(self)
         return self
 
     @classmethod
-    async def create(cls, **kwargs) -> "Manus":
+    async def create(cls, **kwargs) -> "SandboxManus":
         """Factory method to create and properly initialize a Manus instance."""
         instance = cls(**kwargs)
         await instance.initialize_mcp_servers()

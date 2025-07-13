@@ -5,7 +5,13 @@ import io
 from PIL import Image
 import asyncio
 from typing import Optional  # Add this import for Optional
-from app.daytona.tool_base import Sandbox  # Ensure Sandbox is imported correctly
+
+from browser_use.browser.context import BrowserContext
+from browser_use.browser.views import BrowserState, TabInfo
+from daytona.common.process import ExecuteResponse
+from pydantic import Field
+
+from app.daytona.tool_base import Sandbox, ThreadMessage  # Ensure Sandbox is imported correctly
 # from app.agentpress.tool import ToolResult, openapi_schema, xml_schema
 from app.tool.base import ToolResult
 # from app.agentpress.thread_manager import ThreadManager
@@ -28,6 +34,9 @@ Key capabilities include:
 * Tab management: Switch between tabs or close tabs
 * Content extraction: Get dropdown options or select dropdown options
 """
+
+
+# noinspection PyArgumentList
 class SandboxBrowserTool(SandboxToolsBase):
     """Tool for executing tasks in a Daytona sandbox with browser-use capabilities."""
 
@@ -120,6 +129,8 @@ class SandboxBrowserTool(SandboxToolsBase):
             "wait": ["seconds"],
         },
     }
+    browser_message: Optional[ThreadMessage] = Field(default=None, exclude=True)
+
     def __init__(self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data):
         """Initialize with optional sandbox and thread_id."""
         super().__init__(**data)
@@ -198,22 +209,27 @@ class SandboxBrowserTool(SandboxToolsBase):
                     result = json.loads(response.result)
                     result.setdefault("content", "")
                     result.setdefault("role", "assistant")
-            #         if "screenshot_base64" in result:
-            #             screenshot_data = result["screenshot_base64"]
-            #             is_valid, validation_message = self._validate_base64_image(screenshot_data)
-            #             if is_valid:
-            #                 image_url = await upload_base64_image(screenshot_data)
-            #                 result["image_url"] = image_url
-            #             else:
-            #                 logger.warning(f"Screenshot validation failed: {validation_message}")
-            #                 result["image_validation_error"] = validation_message
-            #             del result["screenshot_base64"]
-            #         added_message = await self.thread_manager.add_message(
-            #             thread_id=self.thread_id,
-            #             type="browser_state",
-            #             content=result,
-            #             is_llm_message=False
-            #         )
+                    if "screenshot_base64" in result:
+                        screenshot_data = result["screenshot_base64"]
+                        is_valid, validation_message = self._validate_base64_image(screenshot_data)
+                        if not is_valid:
+                            logger.warning(f"Screenshot validation failed: {validation_message}")
+                            result["image_validation_error"] = validation_message
+                        del result["screenshot_base64"]
+
+                    # added_message = await self.thread_manager.add_message(
+                    #     thread_id=self.thread_id,
+                    #     type="browser_state",
+                    #     content=result,
+                    #     is_llm_message=False
+                    # )
+                    message = ThreadMessage(
+                        thread_id=self.thread_id,
+                        type="browser_state",
+                        content=result,
+                        is_llm_message=False
+                    )
+                    self.browser_message = message
                     success_response = {
                         "success": result.get("success", False),
                         "message": result.get("message", "Browser action completed")
@@ -234,6 +250,8 @@ class SandboxBrowserTool(SandboxToolsBase):
             logger.error(f"Error executing browser action: {e}")
             logger.debug(traceback.format_exc())
             return self.fail_response(f"Error executing browser action: {e}")
+
+
     async def execute(
         self,
         action: str,
@@ -340,6 +358,48 @@ class SandboxBrowserTool(SandboxToolsBase):
         except Exception as e:
             logger.error(f"Error executing browser action: {e}")
             return self.fail_response(f"Error executing browser action: {e}")
+
+    async def get_current_state(
+        self, message: Optional[ThreadMessage] = None
+    ) -> ToolResult:
+        """
+        Get the current browser state as a ToolResult.
+        If context is not provided, uses self.context.
+        """
+        try:
+            # Use provided context or fall back to self.context
+            message = message or self.browser_message
+            if not message:
+                return ToolResult(error="Browser context not initialized")
+            state = message.content
+            screenshot = state.get("screenshot_base64")
+            # Build the state info with all required fields
+            state_info = {
+                "url": state.get("url",""),
+                "title": state.get("title", ""),
+                "tabs": [tab.model_dump() for tab in state.get("tabs", [])],
+                "pixels_above": getattr(state, "pixels_above", 0),
+                "pixels_below": getattr(state, "pixels_below", 0),
+                "help": "[0], [1], [2], etc., represent clickable indices corresponding to the elements listed. Clicking on these indices will navigate to or interact with the respective content behind them.",
+                # "interactive_elements": (
+                #     state.get("element_tree").clickable_elements_to_string()
+                #     if state.get("element_tree")
+                #     else ""
+                # ),
+                # "scroll_info": {
+                #     "pixels_above": getattr(state, "pixels_above", 0),
+                #     "pixels_below": getattr(state, "pixels_below", 0),
+                #     "total_height": getattr(state, "pixels_above", 0)
+                #     + getattr(state, "pixels_below", 0)
+                # }
+            }
+
+            return ToolResult(
+                output=json.dumps(state_info, indent=4, ensure_ascii=False),
+                base64_image=screenshot,
+            )
+        except Exception as e:
+            return ToolResult(error=f"Failed to get browser state: {str(e)}")
     # async def cleanup(self):
     #     """Clean up sandbox resources."""
     #     pass

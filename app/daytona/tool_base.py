@@ -1,5 +1,8 @@
 import asyncio
-from typing import Optional,ClassVar
+
+from dataclasses import field, dataclass
+from datetime import datetime
+from typing import Optional, ClassVar, Dict, Any
 from pydantic import Field
 # from app.agentpress.thread_manager import ThreadManager
 from app.tool.base import BaseTool, ToolResult
@@ -7,6 +10,29 @@ from daytona import Sandbox
 from app.daytona.sandbox import get_or_start_sandbox
 from app.utils.logger import logger
 from app.utils.files_utils import clean_path
+
+@dataclass
+class ThreadMessage:
+    """
+    Represents a message to be added to a thread.
+    """
+    thread_id: str
+    type: str
+    content: Dict[str, Any]
+    is_llm_message: bool = False
+    metadata: Optional[Dict[str, Any]] = None
+    timestamp: Optional[float] = field(default_factory=lambda: datetime.now().timestamp())
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the message to a dictionary for API calls"""
+        return {
+            "thread_id": self.thread_id,
+            "type": self.type,
+            "content": self.content,
+            "is_llm_message": self.is_llm_message,
+            "metadata": self.metadata or {},
+            "timestamp": self.timestamp
+        }
 
 class SandboxToolsBase(BaseTool):
     """Base class for all sandbox tools that provides project-based sandbox access."""
@@ -24,6 +50,7 @@ class SandboxToolsBase(BaseTool):
     _sandbox_pass: Optional[str] = None
     workspace_path: str = Field(default="/workspace", exclude=True)
     _sessions: dict[str, str] = {}
+
 
     class Config:
         arbitrary_types_allowed = True  # Allow non-pydantic types like ThreadManager
