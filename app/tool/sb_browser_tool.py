@@ -224,7 +224,6 @@ class SandboxBrowserTool(SandboxToolsBase):
                     #     is_llm_message=False
                     # )
                     message = ThreadMessage(
-                        thread_id=self.thread_id,
                         type="browser_state",
                         content=result,
                         is_llm_message=False

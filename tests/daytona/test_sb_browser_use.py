@@ -6,26 +6,26 @@ from daytona import DaytonaConfig, Daytona
 import json
 async def main():
     # 创建沙箱和工具
-    # sandbox = create_sandbox(password="123456")
-    config = DaytonaConfig(
-        api_key="dtn_bedf8ed9953f0b5c410c042090e1002a56ba8129b573c92f5607aef04b08c82a",
-        api_url="https://app.daytona.io/api",
-        target="us"
-    )
-    daytona = Daytona(config)
-    sandbox = daytona.find_one("201415a9-28ad-4b6d-8756-13b1e34a70c3")
-    if sandbox.state == "archived" or sandbox.state == "stopped":
-        logger.info(f"Sandbox is in {sandbox.state} state. Starting...")
-        try:
-            daytona.start(sandbox)
-            start_supervisord_session(sandbox)
-            # Wait a moment for the sandbox to initialize
-            # sleep(5)
-            # Refresh sandbox state after starting
-            # sandbox = daytona.get(sandbox.id)
-        except Exception as e:
-            logger.error(f"Error starting sandbox: {e}")
-            raise e
+    sandbox = create_sandbox(password="123456")
+    # config = DaytonaConfig(
+    #     api_key="dtn_bedf8ed9953f0b5c410c042090e1002a56ba8129b573c92f5607aef04b08c82a",
+    #     api_url="https://app.daytona.io/api",
+    #     target="us"
+    # )
+    # daytona = Daytona(config)
+    # sandbox = daytona.find_one("201415a9-28ad-4b6d-8756-13b1e34a70c3")
+    # if sandbox.state == "archived" or sandbox.state == "stopped":
+    #     logger.info(f"Sandbox is in {sandbox.state} state. Starting...")
+    #     try:
+    #         daytona.start(sandbox)
+    #         start_supervisord_session(sandbox)
+    #         # Wait a moment for the sandbox to initialize
+    #         # sleep(5)
+    #         # Refresh sandbox state after starting
+    #         # sandbox = daytona.get(sandbox.id)
+    #     except Exception as e:
+    #         logger.error(f"Error starting sandbox: {e}")
+    #         raise e
 
     # sandbox.start()
     vnc_link = sandbox.get_preview_link(6080)

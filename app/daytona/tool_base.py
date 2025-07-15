@@ -7,7 +7,6 @@ from pydantic import Field
 # from app.agentpress.thread_manager import ThreadManager
 from app.tool.base import BaseTool, ToolResult
 from daytona import Sandbox
-from app.daytona.sandbox import get_or_start_sandbox
 from app.utils.logger import logger
 from app.utils.files_utils import clean_path
 
@@ -16,7 +15,6 @@ class ThreadMessage:
     """
     Represents a message to be added to a thread.
     """
-    thread_id: str
     type: str
     content: Dict[str, Any]
     is_llm_message: bool = False
