@@ -1,12 +1,77 @@
-from agentpress.tool import ToolResult, openapi_schema, xml_schema
-from daytona.tool_base import SandboxToolsBase
-from utils.files_utils import should_exclude_file, clean_path
-from agentpress.thread_manager import ThreadManager
-from utils.logger import logger
+from dataclasses import Field
+from typing import Optional, TypeVar
+from app.tool.base import ToolResult
+from app.daytona.tool_base import SandboxToolsBase, Sandbox
+from app.utils.files_utils import should_exclude_file, clean_path
+from app.agentpress.thread_manager import ThreadManager
+from app.utils.logger import logger
 import os
+import asyncio
+
+Context = TypeVar("Context")
+
+_FILES_DESCRIPTION = """\
+A sandbox-based file system tool that allows file operations in a secure sandboxed environment.
+* This tool provides commands for creating, reading, updating, and deleting files in the workspace
+* All operations are performed relative to the /workspace directory for security
+* Use this when you need to manage files, edit code, or manipulate file contents in a sandbox
+* Each action requires specific parameters as defined in the tool's dependencies
+Key capabilities include:
+* File creation: Create new files with specified content and permissions
+* File modification: Replace specific strings or completely rewrite files
+* File deletion: Remove files from the workspace
+* File reading: Read file contents with optional line range specification
+"""
 
 class SandboxFilesTool(SandboxToolsBase):
-    """Tool for executing file system operations in a Daytona sandbox. All operations are performed relative to the /workspace directory."""
+    name: str = "sandbox_files"
+    description: str = _FILES_DESCRIPTION
+    parameters: dict = {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": [
+                    "create_file",
+                    "str_replace",
+                    "full_file_rewrite",
+                    "delete_file"
+                ],
+                "description": "The file operation to perform",
+            },
+            "file_path": {
+                "type": "string",
+                "description": "Path to the file, relative to /workspace (e.g., 'src/main.py')",
+            },
+            "file_contents": {
+                "type": "string",
+                "description": "Content to write to the file",
+            },
+            "old_str": {
+                "type": "string",
+                "description": "Text to be replaced (must appear exactly once)",
+            },
+            "new_str": {
+                "type": "string",
+                "description": "Replacement text",
+            },
+            "permissions": {
+                "type": "string",
+                "description": "File permissions in octal format (e.g., '644')",
+                "default": "644"
+            }
+        },
+        "required": ["action"],
+        "dependencies": {
+            "create_file": ["file_path", "file_contents"],
+            "str_replace": ["file_path", "old_str", "new_str"],
+            "full_file_rewrite": ["file_path", "file_contents"],
+            "delete_file": ["file_path"],
+        },
+    }
+    SNIPPET_LINES: int = Field(default=4, exclude=True)
+    workspace_path: str = Field(default="/workspace", exclude=True)
+    sandbox: Optional[Sandbox] = Field(default=None, exclude=True)
 
     def __init__(self, project_id: str, thread_manager: ThreadManager):
         super().__init__(project_id, thread_manager)
@@ -64,62 +129,63 @@ class SandboxFilesTool(SandboxToolsBase):
             print(f"Error getting workspace state: {str(e)}")
             return {}
 
+    async def execute(
+        self,
+        action: str,
+        file_path: Optional[str] = None,
+        file_contents: Optional[str] = None,
+        old_str: Optional[str] = None,
+        new_str: Optional[str] = None,
+        permissions: Optional[str] = "644",
+        **kwargs
+    ) -> ToolResult:
+        """
+        Execute a file operation in the sandbox environment.
+        Args:
+            action: The file operation to perform
+            file_path: Path to the file relative to /workspace
+            file_contents: Content to write to the file
+            old_str: Text to be replaced (for str_replace)
+            new_str: Replacement text (for str_replace)
+            permissions: File permissions in octal format
+        Returns:
+            ToolResult with the operation's output or error
+        """
+        async with self.lock:
+            try:
+                # File creation
+                if action == "create_file":
+                    if not file_path or not file_contents:
+                        return self.fail_response("file_path and file_contents are required for create_file")
+                    return await self._create_file(file_path, file_contents, permissions)
 
-    # def _get_preview_url(self, file_path: str) -> Optional[str]:
-    #     """Get the preview URL for a file if it's an HTML file."""
-    #     if file_path.lower().endswith('.html') and self._sandbox_url:
-    #         return f"{self._sandbox_url}/{(file_path.replace('/workspace/', ''))}"
-    #     return None
+                # String replacement
+                elif action == "str_replace":
+                    if not file_path or not old_str or not new_str:
+                        return self.fail_response("file_path, old_str, and new_str are required for str_replace")
+                    return await self._str_replace(file_path, old_str, new_str)
 
-    @openapi_schema({
-        "type": "function",
-        "function": {
-            "name": "create_file",
-            "description": "Create a new file with the provided contents at a given path in the workspace. The path must be relative to /workspace (e.g., 'src/main.py' for /workspace/src/main.py)",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Path to the file to be created, relative to /workspace (e.g., 'src/main.py')"
-                    },
-                    "file_contents": {
-                        "type": "string",
-                        "description": "The content to write to the file"
-                    },
-                    "permissions": {
-                        "type": "string",
-                        "description": "File permissions in octal format (e.g., '644')",
-                        "default": "644"
-                    }
-                },
-                "required": ["file_path", "file_contents"]
-            }
-        }
-    })
-    @xml_schema(
-        tag_name="create-file",
-        mappings=[
-            {"param_name": "file_path", "node_type": "attribute", "path": "."},
-            {"param_name": "file_contents", "node_type": "content", "path": "."}
-        ],
-        example='''
-        <function_calls>
-        <invoke name="create_file">
-        <parameter name="file_path">src/main.py</parameter>
-        <parameter name="file_contents">
-        # This is the file content
-        def main():
-            print("Hello, World!")
+                # Full file rewrite
+                elif action == "full_file_rewrite":
+                    if not file_path or not file_contents:
+                        return self.fail_response("file_path and file_contents are required for full_file_rewrite")
+                    return await self._full_file_rewrite(file_path, file_contents, permissions)
 
-        if __name__ == "__main__":
-            main()
-        </parameter>
-        </invoke>
-        </function_calls>
-        '''
-    )
-    async def create_file(self, file_path: str, file_contents: str, permissions: str = "644") -> ToolResult:
+                # File deletion
+                elif action == "delete_file":
+                    if not file_path:
+                        return self.fail_response("file_path is required for delete_file")
+                    return await self._delete_file(file_path)
+
+                else:
+                    return self.fail_response(f"Unknown action: {action}")
+
+            except Exception as e:
+                logger.error(f"Error executing file action: {e}")
+                return self.fail_response(f"Error executing file action: {e}")
+
+    async def _create_file(self, file_path: str, file_contents: str, permissions: str = "644") -> ToolResult:
+        """Create a new file with the provided contents"""
         try:
             # Ensure sandbox is initialized
             await self._ensure_sandbox()
@@ -127,7 +193,7 @@ class SandboxFilesTool(SandboxToolsBase):
             file_path = self.clean_path(file_path)
             full_path = f"{self.workspace_path}/{file_path}"
             if self._file_exists(full_path):
-                return self.fail_response(f"File '{file_path}' already exists. Use update_file to modify existing files.")
+                return self.fail_response(f"File '{file_path}' already exists. Use full_file_rewrite to modify existing files.")
 
             # Create parent directories if needed
             parent_dir = '/'.join(full_path.split('/')[:-1])
@@ -154,49 +220,8 @@ class SandboxFilesTool(SandboxToolsBase):
         except Exception as e:
             return self.fail_response(f"Error creating file: {str(e)}")
 
-    @openapi_schema({
-        "type": "function",
-        "function": {
-            "name": "str_replace",
-            "description": "Replace specific text in a file. The file path must be relative to /workspace (e.g., 'src/main.py' for /workspace/src/main.py). Use this when you need to replace a unique string that appears exactly once in the file.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Path to the target file, relative to /workspace (e.g., 'src/main.py')"
-                    },
-                    "old_str": {
-                        "type": "string",
-                        "description": "Text to be replaced (must appear exactly once)"
-                    },
-                    "new_str": {
-                        "type": "string",
-                        "description": "Replacement text"
-                    }
-                },
-                "required": ["file_path", "old_str", "new_str"]
-            }
-        }
-    })
-    @xml_schema(
-        tag_name="str-replace",
-        mappings=[
-            {"param_name": "file_path", "node_type": "attribute", "path": "."},
-            {"param_name": "old_str", "node_type": "element", "path": "old_str"},
-            {"param_name": "new_str", "node_type": "element", "path": "new_str"}
-        ],
-        example='''
-        <function_calls>
-        <invoke name="str_replace">
-        <parameter name="file_path">src/main.py</parameter>
-        <parameter name="old_str">text to replace (must appear exactly once in the file)</parameter>
-        <parameter name="new_str">replacement text that will be inserted instead</parameter>
-        </invoke>
-        </function_calls>
-        '''
-    )
-    async def str_replace(self, file_path: str, old_str: str, new_str: str) -> ToolResult:
+    async def _str_replace(self, file_path: str, old_str: str, new_str: str) -> ToolResult:
+        """Replace specific text in a file"""
         try:
             # Ensure sandbox is initialized
             await self._ensure_sandbox()
@@ -227,64 +252,15 @@ class SandboxFilesTool(SandboxToolsBase):
             end_line = replacement_line + self.SNIPPET_LINES + new_str.count('\n')
             snippet = '\n'.join(new_content.split('\n')[start_line:end_line + 1])
 
-            # Get preview URL if it's an HTML file
-            # preview_url = self._get_preview_url(file_path)
             message = f"Replacement successful."
-            # if preview_url:
-            #     message += f"\n\nYou can preview this HTML file at: {preview_url}"
 
             return self.success_response(message)
 
         except Exception as e:
             return self.fail_response(f"Error replacing string: {str(e)}")
 
-    @openapi_schema({
-        "type": "function",
-        "function": {
-            "name": "full_file_rewrite",
-            "description": "Completely rewrite an existing file with new content. The file path must be relative to /workspace (e.g., 'src/main.py' for /workspace/src/main.py). Use this when you need to replace the entire file content or make extensive changes throughout the file.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Path to the file to be rewritten, relative to /workspace (e.g., 'src/main.py')"
-                    },
-                    "file_contents": {
-                        "type": "string",
-                        "description": "The new content to write to the file, replacing all existing content"
-                    },
-                    "permissions": {
-                        "type": "string",
-                        "description": "File permissions in octal format (e.g., '644')",
-                        "default": "644"
-                    }
-                },
-                "required": ["file_path", "file_contents"]
-            }
-        }
-    })
-    @xml_schema(
-        tag_name="full-file-rewrite",
-        mappings=[
-            {"param_name": "file_path", "node_type": "attribute", "path": "."},
-            {"param_name": "file_contents", "node_type": "content", "path": "."}
-        ],
-        example='''
-        <function_calls>
-        <invoke name="full_file_rewrite">
-        <parameter name="file_path">src/main.py</parameter>
-        <parameter name="file_contents">
-        This completely replaces the entire file content.
-        Use when making major changes to a file or when the changes
-        are too extensive for str-replace.
-        All previous content will be lost and replaced with this text.
-        </parameter>
-        </invoke>
-        </function_calls>
-        '''
-    )
-    async def full_file_rewrite(self, file_path: str, file_contents: str, permissions: str = "644") -> ToolResult:
+    async def _full_file_rewrite(self, file_path: str, file_contents: str, permissions: str = "644") -> ToolResult:
+        """Completely rewrite an existing file with new content"""
         try:
             # Ensure sandbox is initialized
             await self._ensure_sandbox()
@@ -313,37 +289,8 @@ class SandboxFilesTool(SandboxToolsBase):
         except Exception as e:
             return self.fail_response(f"Error rewriting file: {str(e)}")
 
-    @openapi_schema({
-        "type": "function",
-        "function": {
-            "name": "delete_file",
-            "description": "Delete a file at the given path. The path must be relative to /workspace (e.g., 'src/main.py' for /workspace/src/main.py)",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "Path to the file to be deleted, relative to /workspace (e.g., 'src/main.py')"
-                    }
-                },
-                "required": ["file_path"]
-            }
-        }
-    })
-    @xml_schema(
-        tag_name="delete-file",
-        mappings=[
-            {"param_name": "file_path", "node_type": "attribute", "path": "."}
-        ],
-        example='''
-        <function_calls>
-        <invoke name="delete_file">
-        <parameter name="file_path">src/main.py</parameter>
-        </invoke>
-        </function_calls>
-        '''
-    )
-    async def delete_file(self, file_path: str) -> ToolResult:
+    async def _delete_file(self, file_path: str) -> ToolResult:
+        """Delete a file at the given path"""
         try:
             # Ensure sandbox is initialized
             await self._ensure_sandbox()
@@ -358,105 +305,11 @@ class SandboxFilesTool(SandboxToolsBase):
         except Exception as e:
             return self.fail_response(f"Error deleting file: {str(e)}")
 
-    # @openapi_schema({
-    #     "type": "function",
-    #     "function": {
-    #         "name": "read_file",
-    #         "description": "Read and return the contents of a file. This tool is essential for verifying data, checking file contents, and analyzing information. Always use this tool to read file contents before processing or analyzing data. The file path must be relative to /workspace.",
-    #         "parameters": {
-    #             "type": "object",
-    #             "properties": {
-    #                 "file_path": {
-    #                     "type": "string",
-    #                     "description": "Path to the file to read, relative to /workspace (e.g., 'src/main.py' for /workspace/src/main.py). Must be a valid file path within the workspace."
-    #                 },
-    #                 "start_line": {
-    #                     "type": "integer",
-    #                     "description": "Optional starting line number (1-based). Use this to read specific sections of large files. If not specified, reads from the beginning of the file.",
-    #                     "default": 1
-    #                 },
-    #                 "end_line": {
-    #                     "type": "integer",
-    #                     "description": "Optional ending line number (inclusive). Use this to read specific sections of large files. If not specified, reads to the end of the file.",
-    #                     "default": None
-    #                 }
-    #             },
-    #             "required": ["file_path"]
-    #         }
-    #     }
-    # })
-    # @xml_schema(
-    #     tag_name="read-file",
-    #     mappings=[
-    #         {"param_name": "file_path", "node_type": "attribute", "path": "."},
-    #         {"param_name": "start_line", "node_type": "attribute", "path": ".", "required": False},
-    #         {"param_name": "end_line", "node_type": "attribute", "path": ".", "required": False}
-    #     ],
-    #     example='''
-    #     <!-- Example 1: Read entire file -->
-    #     <read-file file_path="src/main.py">
-    #     </read-file>
+    async def cleanup(self):
+        """Clean up sandbox resources."""
+        pass
 
-    #     <!-- Example 2: Read specific lines (lines 10-20) -->
-    #     <read-file file_path="src/main.py" start_line="10" end_line="20">
-    #     </read-file>
-
-    #     <!-- Example 3: Read from line 5 to end -->
-    #     <read-file file_path="config.json" start_line="5">
-    #     </read-file>
-
-    #     <!-- Example 4: Read last 10 lines -->
-    #     <read-file file_path="logs/app.log" start_line="-10">
-    #     </read-file>
-    #     '''
-    # )
-    # async def read_file(self, file_path: str, start_line: int = 1, end_line: Optional[int] = None) -> ToolResult:
-    #     """Read file content with optional line range specification.
-
-    #     Args:
-    #         file_path: Path to the file relative to /workspace
-    #         start_line: Starting line number (1-based), defaults to 1
-    #         end_line: Ending line number (inclusive), defaults to None (end of file)
-
-    #     Returns:
-    #         ToolResult containing:
-    #         - Success: File content and metadata
-    #         - Failure: Error message if file doesn't exist or is binary
-    #     """
-    #     try:
-    #         file_path = self.clean_path(file_path)
-    #         full_path = f"{self.workspace_path}/{file_path}"
-
-    #         if not self._file_exists(full_path):
-    #             return self.fail_response(f"File '{file_path}' does not exist")
-
-    #         # Download and decode file content
-    #         content = self.sandbox.fs.download_file(full_path).decode()
-
-    #         # Split content into lines
-    #         lines = content.split('\n')
-    #         total_lines = len(lines)
-
-    #         # Handle line range if specified
-    #         if start_line > 1 or end_line is not None:
-    #             # Convert to 0-based indices
-    #             start_idx = max(0, start_line - 1)
-    #             end_idx = end_line if end_line is not None else total_lines
-    #             end_idx = min(end_idx, total_lines)  # Ensure we don't exceed file length
-
-    #             # Extract the requested lines
-    #             content = '\n'.join(lines[start_idx:end_idx])
-
-    #         return self.success_response({
-    #             "content": content,
-    #             "file_path": file_path,
-    #             "start_line": start_line,
-    #             "end_line": end_line if end_line is not None else total_lines,
-    #             "total_lines": total_lines
-    #         })
-
-    #     except UnicodeDecodeError:
-    #         return self.fail_response(f"File '{file_path}' appears to be binary and cannot be read as text")
-    #     except Exception as e:
-    #         return self.fail_response(f"Error reading file: {str(e)}")
-
+    @classmethod
+    def create_with_context(cls, context: Context) -> "SandboxFilesTool[Context]":
+        """Factory method to create a SandboxFilesTool with a specific context."""
+        raise NotImplementedError("create_with_context not implemented for SandboxFilesTool")
