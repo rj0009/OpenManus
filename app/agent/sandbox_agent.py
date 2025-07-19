@@ -71,6 +71,7 @@ class SandboxManus(ToolCallAgent):
 
     def initialize_sandbox_tools(self,password="123456") -> None:
         sandbox = create_sandbox(password=password)
+        print(f"VNC link: {sandbox.get_preview_link(6080)}")
         computer_tool = SandboxBrowserTool.create_with_sandbox(sandbox)
         sandbox_tools=[computer_tool]
         self.available_tools.add_tools(*sandbox_tools)
