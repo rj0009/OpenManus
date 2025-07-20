@@ -14,6 +14,9 @@ from app.tool.ask_human import AskHuman
 from app.tool.browser_use_tool import BrowserUseTool
 from app.tool.mcp import MCPClients, MCPClientTool
 from app.tool.python_execute import PythonExecute
+from app.tool.sb_files_tool import SandboxFilesTool
+from app.tool.sb_shell_tool import SandboxShellTool
+from app.tool.sb_vision_tool import SandboxVisionTool
 from app.tool.str_replace_editor import StrReplaceEditor
 
 from app.tool.sb_browser_tool import SandboxBrowserTool
@@ -122,8 +125,16 @@ class SandboxManus(ToolCallAgent):
                 }
                 logger.info(f"VNC URL: {vnc_url}")
                 logger.info(f"Website URL: {website_url}")
-            computer_tool = SandboxBrowserTool.create_with_sandbox(sandbox)
-            self.available_tools.add_tools(computer_tool)
+
+            sb_tools = [
+                SandboxBrowserTool(sandbox),
+                SandboxFilesTool(sandbox),
+                SandboxShellTool(sandbox),
+                SandboxVisionTool(sandbox)
+            ]
+            # for sb_tool in sb_tools:
+            #     self.available_tools.add_tool(sb_tool)
+            self.available_tools.add_tools(*sb_tools)
 
         except Exception as e:
             logger.error(f"Error initializing sandbox tools: {e}")

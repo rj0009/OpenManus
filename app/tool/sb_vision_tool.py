@@ -1,3 +1,4 @@
+from pydantic import Field
 import os
 import base64
 import mimetypes
@@ -7,8 +8,7 @@ from io import BytesIO
 from PIL import Image
 
 from app.tool.base import ToolResult
-from app.agentpress.thread_manager import ThreadManager
-from app.daytona.tool_base import SandboxToolsBase
+from app.daytona.tool_base import SandboxToolsBase, Sandbox, ThreadMessage
 
 # 最大文件大小（原图10MB，压缩后5MB）
 MAX_IMAGE_SIZE = 10 * 1024 * 1024
@@ -53,6 +53,13 @@ class SandboxVisionTool(SandboxToolsBase):
     #     super().__init__(project_id=project_id, thread_manager=thread_manager)
     #     self.thread_id = thread_id
     #     self.thread_manager = thread_manager
+
+    vision_message: Optional[ThreadMessage] = Field(default=None, exclude=True)
+    def __init__(self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data):
+        """Initialize with optional sandbox and thread_id."""
+        super().__init__(**data)
+        if sandbox is not None:
+            self._sandbox = sandbox
 
     def compress_image(self, image_bytes: bytes, mime_type: str, file_path: str):
         """压缩图片，保持合理质量。"""
@@ -132,12 +139,13 @@ class SandboxVisionTool(SandboxToolsBase):
                 "original_size": file_info.size,
                 "compressed_size": len(compressed_bytes)
             }
-            await self.thread_manager.add_message(
-                thread_id=self.thread_id,
+            message = ThreadMessage(
                 type="image_context",
                 content=image_context_data,
                 is_llm_message=False
             )
-            return self.success_response(f"成功加载并压缩图片 '{cleaned_path}' (由 {file_info.size / 1024:.1f}KB 压缩到 {len(compressed_bytes) / 1024:.1f}KB)。")
+            self.vision_message = message
+            # return self.success_response(f"成功加载并压缩图片 '{cleaned_path}' (由 {file_info.size / 1024:.1f}KB 压缩到 {len(compressed_bytes) / 1024:.1f}KB)。")
+            return self.success_response(f"成功加载并压缩图片 '{cleaned_path}'，压缩后的内容为：{base64_image}")
         except Exception as e:
             return self.fail_response(f"see_image 执行异常: {str(e)}")

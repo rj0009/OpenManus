@@ -1,9 +1,9 @@
-from dataclasses import Field
+from pydantic import Field
 from typing import Optional, TypeVar
 from app.tool.base import ToolResult
 from app.daytona.tool_base import SandboxToolsBase, Sandbox
 from app.utils.files_utils import should_exclude_file, clean_path
-from app.agentpress.thread_manager import ThreadManager
+# from app.agentpress.thread_manager import ThreadManager
 from app.utils.logger import logger
 import os
 import asyncio
@@ -70,13 +70,14 @@ class SandboxFilesTool(SandboxToolsBase):
         },
     }
     SNIPPET_LINES: int = Field(default=4, exclude=True)
-    workspace_path: str = Field(default="/workspace", exclude=True)
-    sandbox: Optional[Sandbox] = Field(default=None, exclude=True)
+    # workspace_path: str = Field(default="/workspace", exclude=True)
+    # sandbox: Optional[Sandbox] = Field(default=None, exclude=True)
 
-    def __init__(self, project_id: str, thread_manager: ThreadManager):
-        super().__init__(project_id, thread_manager)
-        self.SNIPPET_LINES = 4  # Number of context lines to show around edits
-        self.workspace_path = "/workspace"  # Ensure we're always operating in /workspace
+    def __init__(self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data):
+        """Initialize with optional sandbox and thread_id."""
+        super().__init__(**data)
+        if sandbox is not None:
+            self._sandbox = sandbox
 
     def clean_path(self, path: str) -> str:
         """Clean and normalize a path to be relative to /workspace"""
@@ -151,7 +152,7 @@ class SandboxFilesTool(SandboxToolsBase):
         Returns:
             ToolResult with the operation's output or error
         """
-        async with self.lock:
+        async with asyncio.Lock():
             try:
                 # File creation
                 if action == "create_file":
