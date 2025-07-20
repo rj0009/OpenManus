@@ -17,7 +17,8 @@ from app.tool.python_execute import PythonExecute
 from app.tool.str_replace_editor import StrReplaceEditor
 
 from app.tool.sb_browser_tool import SandboxBrowserTool
-from app.daytona.sandbox import create_sandbox
+from app.daytona.sandbox import create_sandbox,get_or_start_sandbox
+import daytona
 
 class SandboxManus(ToolCallAgent):
     """A versatile general-purpose agent with support for both local and MCP tools."""
@@ -53,6 +54,7 @@ class SandboxManus(ToolCallAgent):
         default_factory=dict
     )  # server_id -> url/command
     _initialized: bool = False
+    sandbox_link: Optional[dict[str, dict[str, str]]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def initialize_helper(self) -> "SandboxManus":
@@ -65,16 +67,67 @@ class SandboxManus(ToolCallAgent):
         """Factory method to create and properly initialize a Manus instance."""
         instance = cls(**kwargs)
         await instance.initialize_mcp_servers()
-        instance.initialize_sandbox_tools()
+        await instance.initialize_sandbox_tools()
         instance._initialized = True
         return instance
 
-    def initialize_sandbox_tools(self,password="123456") -> None:
-        sandbox = create_sandbox(password=password)
-        print(f"VNC link: {sandbox.get_preview_link(6080)}")
-        computer_tool = SandboxBrowserTool.create_with_sandbox(sandbox)
-        sandbox_tools=[computer_tool]
-        self.available_tools.add_tools(*sandbox_tools)
+    async def initialize_sandbox_tools(self, sandbox_id: str = config.daytona.sandbox_id, password:str = config.daytona.VNC_password) -> None:
+        try:
+            if sandbox_id:
+                sandbox = await get_or_start_sandbox(sandbox_id)
+
+                # Initialize sandbox_link if not exists
+                if not self.sandbox_link:
+                    self.sandbox_link = {}
+
+                # Check if URLs are already cached
+                if sandbox_id in self.sandbox_link:
+                    vnc_url = self.sandbox_link[sandbox_id]["vnc"]
+                    website_url = self.sandbox_link[sandbox_id]["website"]
+                    logger.info(f"Using cached URLs - VNC: {vnc_url}, Website: {website_url}")
+                else:
+                    # Get URLs from sandbox and cache them
+                    vnc_link = sandbox.get_preview_link(6080)
+                    website_link = sandbox.get_preview_link(8080)
+                    vnc_url = vnc_link.url if hasattr(vnc_link, 'url') else str(vnc_link)
+                    website_url = website_link.url if hasattr(website_link, 'url') else str(website_link)
+
+                    # Cache the URLs
+                    self.sandbox_link[sandbox_id] = {
+                        "vnc": str(vnc_url),
+                        "website": str(website_url)
+                    }
+                    logger.info(f"Cached new URLs - VNC: {vnc_url}, Website: {website_url}")
+
+                logger.info(f"VNC URL: {vnc_url}")
+                logger.info(f"Website URL: {website_url}")
+            else:
+                # 创建新沙箱
+                if password:
+                    sandbox = create_sandbox(password=password)
+                else:
+                    raise ValueError("Sandbox ID or password must be provided")
+                vnc_link = sandbox.get_preview_link(6080)
+                website_link = sandbox.get_preview_link(8080)
+                vnc_url = vnc_link.url if hasattr(vnc_link, 'url') else str(vnc_link)
+                website_url = website_link.url if hasattr(website_link, 'url') else str(website_link)
+
+                # Get the actual sandbox_id from the created sandbox
+                actual_sandbox_id = sandbox.id if hasattr(sandbox, 'id') else 'new_sandbox'
+                if not self.sandbox_link:
+                    self.sandbox_link = {}
+                self.sandbox_link[actual_sandbox_id] = {
+                    "vnc": vnc_url,
+                    "website": website_url,
+                }
+                logger.info(f"VNC URL: {vnc_url}")
+                logger.info(f"Website URL: {website_url}")
+            computer_tool = SandboxBrowserTool.create_with_sandbox(sandbox)
+            self.available_tools.add_tools(computer_tool)
+
+        except Exception as e:
+            logger.error(f"Error initializing sandbox tools: {e}")
+            raise
 
     async def initialize_mcp_servers(self) -> None:
         """Initialize connections to configured MCP servers."""
