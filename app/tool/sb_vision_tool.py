@@ -2,7 +2,6 @@ from pydantic import Field
 import os
 import base64
 import mimetypes
-import json
 from typing import Optional
 from io import BytesIO
 from PIL import Image

@@ -3,9 +3,7 @@ from typing import Optional, TypeVar
 from app.tool.base import ToolResult
 from app.daytona.tool_base import SandboxToolsBase, Sandbox
 from app.utils.files_utils import should_exclude_file, clean_path
-# from app.agentpress.thread_manager import ThreadManager
 from app.utils.logger import logger
-import os
 import asyncio
 
 Context = TypeVar("Context")

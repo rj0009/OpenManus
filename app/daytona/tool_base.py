@@ -24,7 +24,6 @@ class ThreadMessage:
     def to_dict(self) -> Dict[str, Any]:
         """Convert the message to a dictionary for API calls"""
         return {
-            "thread_id": self.thread_id,
             "type": self.type,
             "content": self.content,
             "is_llm_message": self.is_llm_message,
