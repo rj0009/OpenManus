@@ -7,6 +7,7 @@ from app.tool.str_replace_editor import StrReplaceEditor
 from app.tool.terminate import Terminate
 from app.tool.tool_collection import ToolCollection
 from app.tool.web_search import WebSearch
+from app.tool.crawl4ai import Crawl4aiTool
 
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "ToolCollection",
     "CreateChatCompletion",
     "PlanningTool",
+    "Crawl4aiTool"
 ]
