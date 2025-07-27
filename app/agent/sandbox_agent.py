@@ -229,9 +229,3 @@ class SandboxManus(ToolCallAgent):
         self.next_step_prompt = original_prompt
 
         return result
-        return result
-        return result
-        return result
-        return result
-        return result
-        return result

@@ -21,6 +21,7 @@ Key capabilities include:
 * File reading: Read file contents with optional line range specification
 """
 
+
 class SandboxFilesTool(SandboxToolsBase):
     name: str = "sandbox_files"
     description: str = _FILES_DESCRIPTION
@@ -33,7 +34,7 @@ class SandboxFilesTool(SandboxToolsBase):
                     "create_file",
                     "str_replace",
                     "full_file_rewrite",
-                    "delete_file"
+                    "delete_file",
                 ],
                 "description": "The file operation to perform",
             },
@@ -56,8 +57,8 @@ class SandboxFilesTool(SandboxToolsBase):
             "permissions": {
                 "type": "string",
                 "description": "File permissions in octal format (e.g., '644')",
-                "default": "644"
-            }
+                "default": "644",
+            },
         },
         "required": ["action"],
         "dependencies": {
@@ -71,7 +72,9 @@ class SandboxFilesTool(SandboxToolsBase):
     # workspace_path: str = Field(default="/workspace", exclude=True)
     # sandbox: Optional[Sandbox] = Field(default=None, exclude=True)
 
-    def __init__(self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data):
+    def __init__(
+        self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data
+    ):
         """Initialize with optional sandbox and thread_id."""
         super().__init__(**data)
         if sandbox is not None:
@@ -115,7 +118,7 @@ class SandboxFilesTool(SandboxToolsBase):
                         "content": content,
                         "is_dir": file_info.is_dir,
                         "size": file_info.size,
-                        "modified": file_info.mod_time
+                        "modified": file_info.mod_time,
                     }
                 except Exception as e:
                     print(f"Error reading file {rel_path}: {e}")
@@ -136,7 +139,7 @@ class SandboxFilesTool(SandboxToolsBase):
         old_str: Optional[str] = None,
         new_str: Optional[str] = None,
         permissions: Optional[str] = "644",
-        **kwargs
+        **kwargs,
     ) -> ToolResult:
         """
         Execute a file operation in the sandbox environment.
@@ -155,25 +158,37 @@ class SandboxFilesTool(SandboxToolsBase):
                 # File creation
                 if action == "create_file":
                     if not file_path or not file_contents:
-                        return self.fail_response("file_path and file_contents are required for create_file")
-                    return await self._create_file(file_path, file_contents, permissions)
+                        return self.fail_response(
+                            "file_path and file_contents are required for create_file"
+                        )
+                    return await self._create_file(
+                        file_path, file_contents, permissions
+                    )
 
                 # String replacement
                 elif action == "str_replace":
                     if not file_path or not old_str or not new_str:
-                        return self.fail_response("file_path, old_str, and new_str are required for str_replace")
+                        return self.fail_response(
+                            "file_path, old_str, and new_str are required for str_replace"
+                        )
                     return await self._str_replace(file_path, old_str, new_str)
 
                 # Full file rewrite
                 elif action == "full_file_rewrite":
                     if not file_path or not file_contents:
-                        return self.fail_response("file_path and file_contents are required for full_file_rewrite")
-                    return await self._full_file_rewrite(file_path, file_contents, permissions)
+                        return self.fail_response(
+                            "file_path and file_contents are required for full_file_rewrite"
+                        )
+                    return await self._full_file_rewrite(
+                        file_path, file_contents, permissions
+                    )
 
                 # File deletion
                 elif action == "delete_file":
                     if not file_path:
-                        return self.fail_response("file_path is required for delete_file")
+                        return self.fail_response(
+                            "file_path is required for delete_file"
+                        )
                     return await self._delete_file(file_path)
 
                 else:
@@ -183,7 +198,9 @@ class SandboxFilesTool(SandboxToolsBase):
                 logger.error(f"Error executing file action: {e}")
                 return self.fail_response(f"Error executing file action: {e}")
 
-    async def _create_file(self, file_path: str, file_contents: str, permissions: str = "644") -> ToolResult:
+    async def _create_file(
+        self, file_path: str, file_contents: str, permissions: str = "644"
+    ) -> ToolResult:
         """Create a new file with the provided contents"""
         try:
             # Ensure sandbox is initialized
@@ -192,10 +209,12 @@ class SandboxFilesTool(SandboxToolsBase):
             file_path = self.clean_path(file_path)
             full_path = f"{self.workspace_path}/{file_path}"
             if self._file_exists(full_path):
-                return self.fail_response(f"File '{file_path}' already exists. Use full_file_rewrite to modify existing files.")
+                return self.fail_response(
+                    f"File '{file_path}' already exists. Use full_file_rewrite to modify existing files."
+                )
 
             # Create parent directories if needed
-            parent_dir = '/'.join(full_path.split('/')[:-1])
+            parent_dir = "/".join(full_path.split("/")[:-1])
             if parent_dir:
                 self.sandbox.fs.create_folder(parent_dir, "755")
 
@@ -206,20 +225,28 @@ class SandboxFilesTool(SandboxToolsBase):
             message = f"File '{file_path}' created successfully."
 
             # Check if index.html was created and add 8080 server info (only in root workspace)
-            if file_path.lower() == 'index.html':
+            if file_path.lower() == "index.html":
                 try:
                     website_link = self.sandbox.get_preview_link(8080)
-                    website_url = website_link.url if hasattr(website_link, 'url') else str(website_link).split("url='")[1].split("'")[0]
+                    website_url = (
+                        website_link.url
+                        if hasattr(website_link, "url")
+                        else str(website_link).split("url='")[1].split("'")[0]
+                    )
                     message += f"\n\n[Auto-detected index.html - HTTP server available at: {website_url}]"
                     message += "\n[Note: Use the provided HTTP server URL above instead of starting a new server]"
                 except Exception as e:
-                    logger.warning(f"Failed to get website URL for index.html: {str(e)}")
+                    logger.warning(
+                        f"Failed to get website URL for index.html: {str(e)}"
+                    )
 
             return self.success_response(message)
         except Exception as e:
             return self.fail_response(f"Error creating file: {str(e)}")
 
-    async def _str_replace(self, file_path: str, old_str: str, new_str: str) -> ToolResult:
+    async def _str_replace(
+        self, file_path: str, old_str: str, new_str: str
+    ) -> ToolResult:
         """Replace specific text in a file"""
         try:
             # Ensure sandbox is initialized
@@ -238,18 +265,24 @@ class SandboxFilesTool(SandboxToolsBase):
             if occurrences == 0:
                 return self.fail_response(f"String '{old_str}' not found in file")
             if occurrences > 1:
-                lines = [i+1 for i, line in enumerate(content.split('\n')) if old_str in line]
-                return self.fail_response(f"Multiple occurrences found in lines {lines}. Please ensure string is unique")
+                lines = [
+                    i + 1
+                    for i, line in enumerate(content.split("\n"))
+                    if old_str in line
+                ]
+                return self.fail_response(
+                    f"Multiple occurrences found in lines {lines}. Please ensure string is unique"
+                )
 
             # Perform replacement
             new_content = content.replace(old_str, new_str)
             self.sandbox.fs.upload_file(new_content.encode(), full_path)
 
             # Show snippet around the edit
-            replacement_line = content.split(old_str)[0].count('\n')
+            replacement_line = content.split(old_str)[0].count("\n")
             start_line = max(0, replacement_line - self.SNIPPET_LINES)
-            end_line = replacement_line + self.SNIPPET_LINES + new_str.count('\n')
-            snippet = '\n'.join(new_content.split('\n')[start_line:end_line + 1])
+            end_line = replacement_line + self.SNIPPET_LINES + new_str.count("\n")
+            snippet = "\n".join(new_content.split("\n")[start_line : end_line + 1])
 
             message = f"Replacement successful."
 
@@ -258,7 +291,9 @@ class SandboxFilesTool(SandboxToolsBase):
         except Exception as e:
             return self.fail_response(f"Error replacing string: {str(e)}")
 
-    async def _full_file_rewrite(self, file_path: str, file_contents: str, permissions: str = "644") -> ToolResult:
+    async def _full_file_rewrite(
+        self, file_path: str, file_contents: str, permissions: str = "644"
+    ) -> ToolResult:
         """Completely rewrite an existing file with new content"""
         try:
             # Ensure sandbox is initialized
@@ -267,7 +302,9 @@ class SandboxFilesTool(SandboxToolsBase):
             file_path = self.clean_path(file_path)
             full_path = f"{self.workspace_path}/{file_path}"
             if not self._file_exists(full_path):
-                return self.fail_response(f"File '{file_path}' does not exist. Use create_file to create a new file.")
+                return self.fail_response(
+                    f"File '{file_path}' does not exist. Use create_file to create a new file."
+                )
 
             self.sandbox.fs.upload_file(file_contents.encode(), full_path)
             self.sandbox.fs.set_file_permissions(full_path, permissions)
@@ -275,14 +312,20 @@ class SandboxFilesTool(SandboxToolsBase):
             message = f"File '{file_path}' completely rewritten successfully."
 
             # Check if index.html was rewritten and add 8080 server info (only in root workspace)
-            if file_path.lower() == 'index.html':
+            if file_path.lower() == "index.html":
                 try:
                     website_link = self.sandbox.get_preview_link(8080)
-                    website_url = website_link.url if hasattr(website_link, 'url') else str(website_link).split("url='")[1].split("'")[0]
+                    website_url = (
+                        website_link.url
+                        if hasattr(website_link, "url")
+                        else str(website_link).split("url='")[1].split("'")[0]
+                    )
                     message += f"\n\n[Auto-detected index.html - HTTP server available at: {website_url}]"
                     message += "\n[Note: Use the provided HTTP server URL above instead of starting a new server]"
                 except Exception as e:
-                    logger.warning(f"Failed to get website URL for index.html: {str(e)}")
+                    logger.warning(
+                        f"Failed to get website URL for index.html: {str(e)}"
+                    )
 
             return self.success_response(message)
         except Exception as e:
@@ -311,4 +354,6 @@ class SandboxFilesTool(SandboxToolsBase):
     @classmethod
     def create_with_context(cls, context: Context) -> "SandboxFilesTool[Context]":
         """Factory method to create a SandboxFilesTool with a specific context."""
-        raise NotImplementedError("create_with_context not implemented for SandboxFilesTool")
+        raise NotImplementedError(
+            "create_with_context not implemented for SandboxFilesTool"
+        )

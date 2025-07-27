@@ -18,7 +18,9 @@ This tool is essential for running CLI tools, installing packages, and managing 
 
 class SandboxShellTool(SandboxToolsBase):
     """Tool for executing tasks in a Daytona sandbox with browser-use capabilities.
-    Uses sessions for maintaining state between commands and provides comprehensive process management."""
+    Uses sessions for maintaining state between commands and provides comprehensive process management.
+    """
+
     name: str = "sandbox_shell"
     description: str = _SHELL_DESCRIPTION
     parameters: dict = {
@@ -30,54 +32,56 @@ class SandboxShellTool(SandboxToolsBase):
                     "execute_command",
                     "check_command_output",
                     "terminate_command",
-                    "list_commands"
+                    "list_commands",
                 ],
                 "description": "The shell action to perform",
             },
             "command": {
                 "type": "string",
                 "description": "The shell command to execute. Use this for running CLI tools, installing packages, "
-                               "or system operations. Commands can be chained using &&, ||, and | operators."
+                "or system operations. Commands can be chained using &&, ||, and | operators.",
             },
             "folder": {
                 "type": "string",
                 "description": "Optional relative path to a subdirectory of /workspace where the command should be "
-                               "executed. Example: 'data/pdfs'"
+                "executed. Example: 'data/pdfs'",
             },
             "session_name": {
                 "type": "string",
                 "description": "Optional name of the tmux session to use. Use named sessions for related commands "
-                               "that need to maintain state. Defaults to a random session name.",
+                "that need to maintain state. Defaults to a random session name.",
             },
             "blocking": {
                 "type": "boolean",
                 "description": "Whether to wait for the command to complete. Defaults to false for non-blocking "
-                               "execution.",
-                "default": False
+                "execution.",
+                "default": False,
             },
             "timeout": {
                 "type": "integer",
                 "description": "Optional timeout in seconds for blocking commands. Defaults to 60. Ignored for "
-                               "non-blocking commands.",
-                "default": 60
+                "non-blocking commands.",
+                "default": 60,
             },
             "kill_session": {
                 "type": "boolean",
                 "description": "Whether to terminate the tmux session after checking. Set to true when you're done "
-                               "with the command.",
-                "default": False
-            }
+                "with the command.",
+                "default": False,
+            },
         },
         "required": ["action"],
         "dependencies": {
             "execute_command": ["command"],
             "check_command_output": ["session_name"],
             "terminate_command": ["session_name"],
-            "list_commands": []
+            "list_commands": [],
         },
     }
 
-    def __init__(self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data):
+    def __init__(
+        self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data
+    ):
         """Initialize with optional sandbox and thread_id."""
         super().__init__(**data)
         if sandbox is not None:
@@ -112,35 +116,30 @@ class SandboxShellTool(SandboxToolsBase):
 
         # Execute command in session
         from app.daytona.sandbox import SessionExecuteRequest
+
         req = SessionExecuteRequest(
-            command=command,
-            run_async=False,
-            cwd=self.workspace_path
+            command=command, run_async=False, cwd=self.workspace_path
         )
 
         response = self.sandbox.process.execute_session_command(
             session_id=session_id,
             req=req,
-            timeout=30  # Short timeout for utility commands
+            timeout=30,  # Short timeout for utility commands
         )
 
         logs = self.sandbox.process.get_session_command_logs(
-            session_id=session_id,
-            command_id=response.cmd_id
+            session_id=session_id, command_id=response.cmd_id
         )
 
-        return {
-            "output": logs,
-            "exit_code": response.exit_code
-        }
+        return {"output": logs, "exit_code": response.exit_code}
 
     async def _execute_command(
-            self,
-            command: str,
-            folder: Optional[str] = None,
-            session_name: Optional[str] = None,
-            blocking: bool = False,
-            timeout: int = 60
+        self,
+        command: str,
+        folder: Optional[str] = None,
+        session_name: Optional[str] = None,
+        blocking: bool = False,
+        timeout: int = 60,
     ) -> ToolResult:
         try:
             # Ensure sandbox is initialized
@@ -149,7 +148,7 @@ class SandboxShellTool(SandboxToolsBase):
             # Set up working directory
             cwd = self.workspace_path
             if folder:
-                folder = folder.strip('/')
+                folder = folder.strip("/")
                 cwd = f"{self.workspace_path}/{folder}"
 
             # Generate a session name if not provided
@@ -158,19 +157,24 @@ class SandboxShellTool(SandboxToolsBase):
 
             # Check if tmux session already exists
             check_session = await self._execute_raw_command(
-                f"tmux has-session -t {session_name} 2>/dev/null || echo 'not_exists'")
+                f"tmux has-session -t {session_name} 2>/dev/null || echo 'not_exists'"
+            )
             session_exists = "not_exists" not in check_session.get("output", "")
 
             if not session_exists:
                 # Create a new tmux session
-                await self._execute_raw_command(f"tmux new-session -d -s {session_name}")
+                await self._execute_raw_command(
+                    f"tmux new-session -d -s {session_name}"
+                )
 
             # Ensure we're in the correct directory and send command to tmux
             full_command = f"cd {cwd} && {command}"
             wrapped_command = full_command.replace('"', '\\"')  # Escape double quotes
 
             # Send command to tmux session
-            await self._execute_raw_command(f'tmux send-keys -t {session_name} "{wrapped_command}" Enter')
+            await self._execute_raw_command(
+                f'tmux send-keys -t {session_name} "{wrapped_command}" Enter'
+            )
 
             if blocking:
                 # For blocking execution, wait and capture output
@@ -181,56 +185,76 @@ class SandboxShellTool(SandboxToolsBase):
 
                     # Check if session still exists (command might have exited)
                     check_result = await self._execute_raw_command(
-                        f"tmux has-session -t {session_name} 2>/dev/null || echo 'ended'")
+                        f"tmux has-session -t {session_name} 2>/dev/null || echo 'ended'"
+                    )
                     if "ended" in check_result.get("output", ""):
                         break
 
                     # Get current output and check for common completion indicators
-                    output_result = await self._execute_raw_command(f"tmux capture-pane -t {session_name} -p -S - -E -")
+                    output_result = await self._execute_raw_command(
+                        f"tmux capture-pane -t {session_name} -p -S - -E -"
+                    )
                     current_output = output_result.get("output", "")
 
                     # Check for prompt indicators that suggest command completion
-                    last_lines = current_output.split('\n')[-3:]
-                    completion_indicators = ['$', '#', '>', 'Done', 'Completed', 'Finished', '✓']
-                    if any(indicator in line for indicator in completion_indicators for line in last_lines):
+                    last_lines = current_output.split("\n")[-3:]
+                    completion_indicators = [
+                        "$",
+                        "#",
+                        ">",
+                        "Done",
+                        "Completed",
+                        "Finished",
+                        "✓",
+                    ]
+                    if any(
+                        indicator in line
+                        for indicator in completion_indicators
+                        for line in last_lines
+                    ):
                         break
 
                 # Capture final output
-                output_result = await self._execute_raw_command(f"tmux capture-pane -t {session_name} -p -S - -E -")
+                output_result = await self._execute_raw_command(
+                    f"tmux capture-pane -t {session_name} -p -S - -E -"
+                )
                 final_output = output_result.get("output", "")
 
                 # Kill the session after capture
                 await self._execute_raw_command(f"tmux kill-session -t {session_name}")
 
-                return self.success_response({
-                    "output": final_output,
-                    "session_name": session_name,
-                    "cwd": cwd,
-                    "completed": True
-                })
+                return self.success_response(
+                    {
+                        "output": final_output,
+                        "session_name": session_name,
+                        "cwd": cwd,
+                        "completed": True,
+                    }
+                )
             else:
                 # For non-blocking, just return immediately
-                return self.success_response({
-                    "session_name": session_name,
-                    "cwd": cwd,
-                    "message":
-                        f"Command sent to tmux session '{session_name}'. Use check_command_output to view results.",
-                    "completed": False
-                })
+                return self.success_response(
+                    {
+                        "session_name": session_name,
+                        "cwd": cwd,
+                        "message": f"Command sent to tmux session '{session_name}'. Use check_command_output to view results.",
+                        "completed": False,
+                    }
+                )
 
         except Exception as e:
             # Attempt to clean up session in case of error
             if session_name:
                 try:
-                    await self._execute_raw_command(f"tmux kill-session -t {session_name}")
+                    await self._execute_raw_command(
+                        f"tmux kill-session -t {session_name}"
+                    )
                 except:
                     pass
             return self.fail_response(f"Error executing command: {str(e)}")
 
     async def _check_command_output(
-            self,
-            session_name: str,
-            kill_session: bool = False
+        self, session_name: str, kill_session: bool = False
     ) -> ToolResult:
         try:
             # Ensure sandbox is initialized
@@ -238,12 +262,17 @@ class SandboxShellTool(SandboxToolsBase):
 
             # Check if session exists
             check_result = await self._execute_raw_command(
-                f"tmux has-session -t {session_name} 2>/dev/null || echo 'not_exists'")
+                f"tmux has-session -t {session_name} 2>/dev/null || echo 'not_exists'"
+            )
             if "not_exists" in check_result.get("output", ""):
-                return self.fail_response(f"Tmux session '{session_name}' does not exist.")
+                return self.fail_response(
+                    f"Tmux session '{session_name}' does not exist."
+                )
 
             # Get output from tmux pane
-            output_result = await self._execute_raw_command(f"tmux capture-pane -t {session_name} -p -S - -E -")
+            output_result = await self._execute_raw_command(
+                f"tmux capture-pane -t {session_name} -p -S - -E -"
+            )
             output = output_result.get("output", "")
 
             # Kill session if requested
@@ -253,35 +282,37 @@ class SandboxShellTool(SandboxToolsBase):
             else:
                 termination_status = "Session still running."
 
-            return self.success_response({
-                "output": output,
-                "session_name": session_name,
-                "status": termination_status
-            })
+            return self.success_response(
+                {
+                    "output": output,
+                    "session_name": session_name,
+                    "status": termination_status,
+                }
+            )
 
         except Exception as e:
             return self.fail_response(f"Error checking command output: {str(e)}")
 
-    async def _terminate_command(
-            self,
-            session_name: str
-    ) -> ToolResult:
+    async def _terminate_command(self, session_name: str) -> ToolResult:
         try:
             # Ensure sandbox is initialized
             await self._ensure_sandbox()
 
             # Check if session exists
             check_result = await self._execute_raw_command(
-                f"tmux has-session -t {session_name} 2>/dev/null || echo 'not_exists'")
+                f"tmux has-session -t {session_name} 2>/dev/null || echo 'not_exists'"
+            )
             if "not_exists" in check_result.get("output", ""):
-                return self.fail_response(f"Tmux session '{session_name}' does not exist.")
+                return self.fail_response(
+                    f"Tmux session '{session_name}' does not exist."
+                )
 
             # Kill the session
             await self._execute_raw_command(f"tmux kill-session -t {session_name}")
 
-            return self.success_response({
-                "message": f"Tmux session '{session_name}' terminated successfully."
-            })
+            return self.success_response(
+                {"message": f"Tmux session '{session_name}' terminated successfully."}
+            )
 
         except Exception as e:
             return self.fail_response(f"Error terminating command: {str(e)}")
@@ -292,41 +323,44 @@ class SandboxShellTool(SandboxToolsBase):
             await self._ensure_sandbox()
 
             # List all tmux sessions
-            result = await self._execute_raw_command("tmux list-sessions 2>/dev/null || echo 'No sessions'")
+            result = await self._execute_raw_command(
+                "tmux list-sessions 2>/dev/null || echo 'No sessions'"
+            )
             output = result.get("output", "")
 
             if "No sessions" in output or not output.strip():
-                return self.success_response({
-                    "message": "No active tmux sessions found.",
-                    "sessions": []
-                })
+                return self.success_response(
+                    {"message": "No active tmux sessions found.", "sessions": []}
+                )
 
             # Parse session list
             sessions = []
-            for line in output.split('\n'):
+            for line in output.split("\n"):
                 if line.strip():
-                    parts = line.split(':')
+                    parts = line.split(":")
                     if parts:
                         session_name = parts[0].strip()
                         sessions.append(session_name)
 
-            return self.success_response({
-                "message": f"Found {len(sessions)} active sessions.",
-                "sessions": sessions
-            })
+            return self.success_response(
+                {
+                    "message": f"Found {len(sessions)} active sessions.",
+                    "sessions": sessions,
+                }
+            )
 
         except Exception as e:
             return self.fail_response(f"Error listing commands: {str(e)}")
 
     async def execute(
-            self,
-            action: str,
-            command: str,
-            folder: Optional[str] = None,
-            session_name: Optional[str] = None,
-            blocking: bool = False,
-            timeout: int = 60,
-            kill_session: bool = False,
+        self,
+        action: str,
+        command: str,
+        folder: Optional[str] = None,
+        session_name: Optional[str] = None,
+        blocking: bool = False,
+        timeout: int = 60,
+        kill_session: bool = False,
     ) -> ToolResult:
         """
         Execute a browser action in the sandbox environment.
@@ -347,14 +381,20 @@ class SandboxShellTool(SandboxToolsBase):
                 if action == "execute_command":
                     if not command:
                         return self.fail_response("command is required for navigation")
-                    return await self._execute_command(command, folder, session_name, blocking, timeout)
+                    return await self._execute_command(
+                        command, folder, session_name, blocking, timeout
+                    )
                 elif action == "check_command_output":
                     if session_name is None:
-                        return self.fail_response("session_name is required for navigation")
+                        return self.fail_response(
+                            "session_name is required for navigation"
+                        )
                     return await self._check_command_output(session_name, kill_session)
                 elif action == "terminate_command":
                     if session_name is None:
-                        return self.fail_response("session_name is required for click_element")
+                        return self.fail_response(
+                            "session_name is required for click_element"
+                        )
                     return await self._terminate_command(session_name)
                 elif action == "list_commands":
                     return await self._list_commands()
@@ -363,7 +403,6 @@ class SandboxShellTool(SandboxToolsBase):
             except Exception as e:
                 logger.error(f"Error executing shell action: {e}")
                 return self.fail_response(f"Error executing shell action: {e}")
-
 
     async def cleanup(self):
         """Clean up all sessions."""
