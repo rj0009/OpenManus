@@ -1,36 +1,29 @@
-import json
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import Dict, List, Optional
 
-import daytona
 from pydantic import Field, model_validator
 
 from app.agent.browser import BrowserContextHelper
 from app.agent.toolcall import ToolCallAgent
 from app.config import config
-from app.daytona.sandbox import create_sandbox, delete_sandbox, get_or_start_sandbox
+from app.daytona.sandbox import create_sandbox, delete_sandbox
 from app.daytona.tool_base import SandboxToolsBase
 from app.logger import logger
 from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
-from app.schema import Message
 from app.tool import Terminate, ToolCollection
 from app.tool.ask_human import AskHuman
 from app.tool.browser_use_tool import BrowserUseTool
 from app.tool.mcp import MCPClients, MCPClientTool
-from app.tool.python_execute import PythonExecute
 from app.tool.sb_browser_tool import SandboxBrowserTool
 from app.tool.sb_files_tool import SandboxFilesTool
 from app.tool.sb_shell_tool import SandboxShellTool
 from app.tool.sb_vision_tool import SandboxVisionTool
-from app.tool.str_replace_editor import StrReplaceEditor
 
 
 class SandboxManus(ToolCallAgent):
     """A versatile general-purpose agent with support for both local and MCP tools."""
 
     name: str = "SandboxManus"
-    description: str = (
-        "A versatile agent that can solve various tasks using multiple sandbox-tools including MCP-based tools"
-    )
+    description: str = "A versatile agent that can solve various tasks using multiple sandbox-tools including MCP-based tools"
 
     system_prompt: str = SYSTEM_PROMPT.format(directory=config.workspace_root)
     next_step_prompt: str = NEXT_STEP_PROMPT

@@ -1,13 +1,15 @@
-from pydantic import Field
-import os
 import base64
 import mimetypes
-from typing import Optional
+import os
 from io import BytesIO
-from PIL import Image
+from typing import Optional
 
+from PIL import Image
+from pydantic import Field
+
+from app.daytona.tool_base import Sandbox, SandboxToolsBase, ThreadMessage
 from app.tool.base import ToolResult
-from app.daytona.tool_base import SandboxToolsBase, Sandbox, ThreadMessage
+
 
 # 最大文件大小（原图10MB，压缩后5MB）
 MAX_IMAGE_SIZE = 10 * 1024 * 1024
@@ -99,7 +101,7 @@ class SandboxVisionTool(SandboxToolsBase):
                 output_mime = "image/jpeg"
             compressed_bytes = output.getvalue()
             return compressed_bytes, output_mime
-        except Exception as e:
+        except Exception:
             return image_bytes, mime_type
 
     async def execute(
@@ -122,9 +124,7 @@ class SandboxVisionTool(SandboxToolsBase):
             try:
                 file_info = self.sandbox.fs.get_file_info(full_path)
                 if file_info.is_dir:
-                    return self.fail_response(
-                        f"路径 '{cleaned_path}' 是目录，不是图片文件。"
-                    )
+                    return self.fail_response(f"路径 '{cleaned_path}' 是目录，不是图片文件。")
             except Exception:
                 return self.fail_response(f"图片文件未找到: '{cleaned_path}'")
             if file_info.size > MAX_IMAGE_SIZE:

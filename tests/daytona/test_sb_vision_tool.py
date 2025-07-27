@@ -1,8 +1,8 @@
-from app.tool.sb_shell_tool import SandboxShellTool
-from app.tool.sb_vision_tool import SandboxVisionTool
-from app.daytona.sandbox import create_sandbox
 import asyncio
 
+from app.daytona.sandbox import create_sandbox
+from app.tool.sb_shell_tool import SandboxShellTool
+from app.tool.sb_vision_tool import SandboxVisionTool
 
 
 async def main():
@@ -21,14 +21,20 @@ async def main():
     sb_vision_tool = SandboxVisionTool(sandbox)
 
     # 执行终端命令
-    result = await sb_shell_tool.execute(action="execute_command", command="curl -O http://img.netbian.com/file/2025/0716/091412RIFD9.jpg")
+    result = await sb_shell_tool.execute(
+        action="execute_command",
+        command="curl -O http://img.netbian.com/file/2025/0716/091412RIFD9.jpg",
+    )
     print(result)
     # 执行see_image操作
-    result = await sb_vision_tool.execute(action="see_image", file_path="091412RIFD9.jpg")
+    result = await sb_vision_tool.execute(
+        action="see_image", file_path="091412RIFD9.jpg"
+    )
     print(result)
 
     # 清理资源（可选）
     # await sb_shell_tool.cleanup()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

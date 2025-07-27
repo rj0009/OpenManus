@@ -2,23 +2,14 @@ import os
 import urllib.parse
 from typing import Optional
 
-from fastapi import (
-    FastAPI,
-    UploadFile,
-    File,
-    HTTPException,
-    APIRouter,
-    Form,
-    Depends,
-    Request,
-)
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
-
-from sandbox.sandbox import get_or_start_sandbox, delete_sandbox
-from utils.logger import logger
-from utils.auth_utils import get_optional_user_id
+from sandbox.sandbox import delete_sandbox, get_or_start_sandbox
 from services.supabase import DBConnection
+from utils.auth_utils import get_optional_user_id
+from utils.logger import logger
+
 
 # Initialize shared resources
 router = APIRouter(tags=["sandbox"])
@@ -459,7 +450,7 @@ async def ensure_project_sandbox_active(
 
         # Get or start the sandbox
         logger.info(f"Ensuring sandbox is active for project {project_id}")
-        sandbox = await get_or_start_sandbox(sandbox_id)
+        await get_or_start_sandbox(sandbox_id)
 
         logger.info(
             f"Successfully ensured sandbox {sandbox_id} is active for project {project_id}"

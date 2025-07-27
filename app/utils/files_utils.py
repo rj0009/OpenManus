@@ -1,5 +1,5 @@
-
 import os
+
 
 # Files to exclude from operations
 EXCLUDED_FILES = {
@@ -15,13 +15,7 @@ EXCLUDED_FILES = {
 }
 
 # Directories to exclude from operations
-EXCLUDED_DIRS = {
-    "node_modules",
-    ".next",
-    "dist",
-    "build",
-    ".git"
-}
+EXCLUDED_DIRS = {"node_modules", ".next", "dist", "build", ".git"}
 
 # File extensions to exclude from operations
 EXCLUDED_EXT = {
@@ -35,8 +29,9 @@ EXCLUDED_EXT = {
     ".tiff",
     ".webp",
     ".db",
-    ".sql"
+    ".sql",
 }
+
 
 def should_exclude_file(rel_path: str) -> bool:
     """Check if a file should be excluded based on path, name, or extension
@@ -64,6 +59,7 @@ def should_exclude_file(rel_path: str) -> bool:
 
     return False
 
+
 def clean_path(path: str, workspace_path: str = "/workspace") -> str:
     """Clean and normalize a path to be relative to the workspace
 
@@ -75,17 +71,17 @@ def clean_path(path: str, workspace_path: str = "/workspace") -> str:
         The cleaned path, relative to the workspace
     """
     # Remove any leading slash
-    path = path.lstrip('/')
+    path = path.lstrip("/")
 
     # Remove workspace prefix if present
-    if path.startswith(workspace_path.lstrip('/')):
-        path = path[len(workspace_path.lstrip('/')):]
+    if path.startswith(workspace_path.lstrip("/")):
+        path = path[len(workspace_path.lstrip("/")) :]
 
     # Remove workspace/ prefix if present
-    if path.startswith('workspace/'):
+    if path.startswith("workspace/"):
         path = path[9:]
 
     # Remove any remaining leading slash
-    path = path.lstrip('/')
+    path = path.lstrip("/")
 
     return path

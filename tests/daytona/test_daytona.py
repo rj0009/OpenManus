@@ -1,10 +1,5 @@
-from daytona import (
-    CreateSandboxFromImageParams,
-    Daytona,
-    DaytonaConfig,
-    Image,
-    Resources,
-)
+from daytona import CreateSandboxFromImageParams, Daytona, DaytonaConfig, Resources
+
 
 # Using environment variables (DAYTONA_API_KEY, DAYTONA_API_URL, DAYTONA_TARGET)
 # daytona = Daytona()

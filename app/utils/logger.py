@@ -1,4 +1,8 @@
-import structlog, logging, os
+import logging
+import os
+
+import structlog
+
 
 ENV_MODE = os.getenv("ENV_MODE", "LOCAL")
 

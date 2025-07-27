@@ -1,17 +1,19 @@
 import asyncio
-from typing import Optional, Dict, Any, TypeVar
 import time
+from typing import Any, Dict, Optional, TypeVar
 from uuid import uuid4
+
+from app.daytona.tool_base import Sandbox, SandboxToolsBase
 from app.tool.base import ToolResult
-from app.daytona.tool_base import SandboxToolsBase, Sandbox
 from app.utils.logger import logger
+
 
 Context = TypeVar("Context")
 _SHELL_DESCRIPTION = """\
-Execute a shell command in the workspace directory. 
-IMPORTANT: Commands are non-blocking by default and run in a tmux session. 
-This is ideal for long-running operations like starting servers or build processes. 
-Uses sessions to maintain state between commands. 
+Execute a shell command in the workspace directory.
+IMPORTANT: Commands are non-blocking by default and run in a tmux session.
+This is ideal for long-running operations like starting servers or build processes.
+Uses sessions to maintain state between commands.
 This tool is essential for running CLI tools, installing packages, and managing system operations.
 """
 
@@ -415,4 +417,3 @@ class SandboxShellTool(SandboxToolsBase):
             await self._execute_raw_command("tmux kill-server 2>/dev/null || true")
         except Exception as e:
             logger.error(f"Error shell box cleanup action: {e}")
-            pass

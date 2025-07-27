@@ -7,10 +7,10 @@ from daytona import (
     SandboxState,
     SessionExecuteRequest,
 )
-from dotenv import load_dotenv
 
 from app.config import config
 from app.utils.logger import logger
+
 
 # load_dotenv()
 daytona_settings = config.daytona

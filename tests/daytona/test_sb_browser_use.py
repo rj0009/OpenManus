@@ -1,11 +1,7 @@
 import asyncio
-import json
 
-from daytona import Daytona, DaytonaConfig
-
-from app.daytona.sandbox import create_sandbox, start_supervisord_session
+from app.daytona.sandbox import create_sandbox
 from app.tool.sb_browser_tool import SandboxBrowserTool
-from app.utils.logger import logger
 
 
 async def main():

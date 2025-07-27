@@ -1,9 +1,11 @@
-from abc import ABC, abstractmethod
-from pydantic import BaseModel, Field
-from typing import Any, Dict, Optional, Union
-import inspect
 import json
+from abc import ABC, abstractmethod
+from typing import Any, Dict, Optional, Union
+
+from pydantic import BaseModel, Field
+
 from app.utils.logger import logger
+
 
 # class BaseTool(ABC, BaseModel):
 #     name: str
@@ -31,7 +33,6 @@ from app.utils.logger import logger
 #                 "parameters": self.parameters,
 #             },
 #         }
-
 
 
 class ToolResult(BaseModel):
@@ -72,6 +73,7 @@ class ToolResult(BaseModel):
         """Returns a new ToolResult with the given fields replaced."""
         # return self.copy(update=kwargs)
         return type(self)(**{**self.dict(), **kwargs})
+
 
 class BaseTool(ABC, BaseModel):
     """Consolidated base class for all tools combining BaseModel and Tool functionality.
@@ -169,6 +171,8 @@ class BaseTool(ABC, BaseModel):
         """
         logger.debug(f"Tool {self.__class__.__name__} returned failed result: {msg}")
         return ToolResult(error=msg)
+
+
 class CLIResult(ToolResult):
     """A ToolResult that can be rendered as a CLI output."""
 

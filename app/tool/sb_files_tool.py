@@ -1,10 +1,13 @@
-from pydantic import Field
-from typing import Optional, TypeVar
-from app.tool.base import ToolResult
-from app.daytona.tool_base import SandboxToolsBase, Sandbox
-from app.utils.files_utils import should_exclude_file, clean_path
-from app.utils.logger import logger
 import asyncio
+from typing import Optional, TypeVar
+
+from pydantic import Field
+
+from app.daytona.tool_base import Sandbox, SandboxToolsBase
+from app.tool.base import ToolResult
+from app.utils.files_utils import clean_path, should_exclude_file
+from app.utils.logger import logger
+
 
 Context = TypeVar("Context")
 
@@ -349,7 +352,6 @@ class SandboxFilesTool(SandboxToolsBase):
 
     async def cleanup(self):
         """Clean up sandbox resources."""
-        pass
 
     @classmethod
     def create_with_context(cls, context: Context) -> "SandboxFilesTool[Context]":
