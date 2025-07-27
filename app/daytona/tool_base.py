@@ -1,25 +1,46 @@
 import asyncio
-
-from dataclasses import field, dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, ClassVar, Dict, Any
+from typing import Any, ClassVar, Dict, Optional
+
+from daytona import Daytona, DaytonaConfig, Sandbox, SandboxState
 from pydantic import Field
+
+from app.config import config
+from app.daytona.sandbox import (
+    create_sandbox,
+    get_or_start_sandbox,
+    start_supervisord_session,
+)
+
 # from app.agentpress.thread_manager import ThreadManager
 from app.tool.base import BaseTool, ToolResult
-from daytona import Sandbox
-from app.utils.logger import logger
 from app.utils.files_utils import clean_path
+from app.utils.logger import logger
+
+# load_dotenv()
+daytona_settings = config.daytona
+daytona_config = DaytonaConfig(
+    api_key=daytona_settings.daytona_api_key,
+    server_url=daytona_settings.daytona_server_url,
+    target=daytona_settings.daytona_target,
+)
+daytona = Daytona(daytona_config)
+
 
 @dataclass
 class ThreadMessage:
     """
     Represents a message to be added to a thread.
     """
+
     type: str
     content: Dict[str, Any]
     is_llm_message: bool = False
     metadata: Optional[Dict[str, Any]] = None
-    timestamp: Optional[float] = field(default_factory=lambda: datetime.now().timestamp())
+    timestamp: Optional[float] = field(
+        default_factory=lambda: datetime.now().timestamp()
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the message to a dictionary for API calls"""
@@ -28,8 +49,9 @@ class ThreadMessage:
             "content": self.content,
             "is_llm_message": self.is_llm_message,
             "metadata": self.metadata or {},
-            "timestamp": self.timestamp
+            "timestamp": self.timestamp,
         }
+
 
 class SandboxToolsBase(BaseTool):
     """Base class for all sandbox tools that provides project-based sandbox access."""
@@ -48,53 +70,55 @@ class SandboxToolsBase(BaseTool):
     workspace_path: str = Field(default="/workspace", exclude=True)
     _sessions: dict[str, str] = {}
 
-
     class Config:
         arbitrary_types_allowed = True  # Allow non-pydantic types like ThreadManager
         underscore_attrs_are_private = True
+
     async def _ensure_sandbox(self) -> Sandbox:
         """Ensure we have a valid sandbox instance, retrieving it from the project if needed."""
         if self._sandbox is None:
-            # try:
-            #     # Get database client
-            #     client = await self.thread_manager.db.client
-            #
-            #     # Get project data
-            #     project = await client.table('projects').select('*').eq('project_id', self.project_id).execute()
-            #     if not project.data or len(project.data) == 0:
-            #         raise ValueError(f"Project {self.project_id} not found")
-            #
-            #     project_data = project.data[0]
-            #     sandbox_info = project_data.get('sandbox', {})
-            #
-            #     if not sandbox_info.get('id'):
-            #         raise ValueError(f"No sandbox found for project {self.project_id}")
-            #
-            #     # Store sandbox info
-            #     self._sandbox_id = sandbox_info['id']
-            #     self._sandbox_pass = sandbox_info.get('pass')
-            #
-            #     # Get or start the sandbox
-            #     self._sandbox = await get_or_start_sandbox(self._sandbox_id)
-            #
-            #     # # Log URLs if not already printed
-            #     # if not SandboxToolsBase._urls_printed:
-            #     #     vnc_link = self._sandbox.get_preview_link(6080)
-            #     #     website_link = self._sandbox.get_preview_link(8080)
-            #
-            #     #     vnc_url = vnc_link.url if hasattr(vnc_link, 'url') else str(vnc_link)
-            #     #     website_url = website_link.url if hasattr(website_link, 'url') else str(website_link)
-            #
-            #     #     print("\033[95m***")
-            #     #     print(f"VNC URL: {vnc_url}")
-            #     #     print(f"Website URL: {website_url}")
-            #     #     print("***\033[0m")
-            #     #     SandboxToolsBase._urls_printed = True
-            #
-            # except Exception as e:
-            logger.error(f"Error retrieving sandbox for project {self.project_id}: {str(e)}", exc_info=True)
-            raise Exception
+            # Get or start the sandbox
+            try:
+                self._sandbox = create_sandbox(password=config.daytona.VNC_password)
+                # Log URLs if not already printed
+                if not SandboxToolsBase._urls_printed:
+                    vnc_link = self._sandbox.get_preview_link(6080)
+                    website_link = self._sandbox.get_preview_link(8080)
 
+                    vnc_url = (
+                        vnc_link.url if hasattr(vnc_link, "url") else str(vnc_link)
+                    )
+                    website_url = (
+                        website_link.url
+                        if hasattr(website_link, "url")
+                        else str(website_link)
+                    )
+
+                    print("\033[95m***")
+                    print(f"VNC URL: {vnc_url}")
+                    print(f"Website URL: {website_url}")
+                    print("***\033[0m")
+                    SandboxToolsBase._urls_printed = True
+            except Exception as e:
+                logger.error(f"Error retrieving or starting sandbox: {str(e)}")
+                raise e
+        else:
+            if (
+                self._sandbox.state == SandboxState.ARCHIVED
+                or self._sandbox.state == SandboxState.STOPPED
+            ):
+                logger.info(f"Sandbox is in {self._sandbox.state} state. Starting...")
+                try:
+                    daytona.start(self._sandbox)
+                    # Wait a moment for the sandbox to initialize
+                    # sleep(5)
+                    # Refresh sandbox state after starting
+
+                    # Start supervisord in a session when restarting
+                    start_supervisord_session(self._sandbox)
+                except Exception as e:
+                    logger.error(f"Error starting sandbox: {e}")
+                    raise e
         return self._sandbox
 
     @property
@@ -108,7 +132,9 @@ class SandboxToolsBase(BaseTool):
     def sandbox_id(self) -> str:
         """Get the sandbox ID, ensuring it exists."""
         if self._sandbox_id is None:
-            raise RuntimeError("Sandbox ID not initialized. Call _ensure_sandbox() first.")
+            raise RuntimeError(
+                "Sandbox ID not initialized. Call _ensure_sandbox() first."
+            )
         return self._sandbox_id
 
     def clean_path(self, path: str) -> str:

@@ -1,14 +1,18 @@
-from app.tool.sb_browser_tool import SandboxBrowserTool
-from app.daytona.sandbox import create_sandbox,start_supervisord_session
 import asyncio
-from app.utils.logger import logger
-from daytona import DaytonaConfig, Daytona
 import json
+
+from daytona import Daytona, DaytonaConfig
+
+from app.daytona.sandbox import create_sandbox, start_supervisord_session
+from app.tool.sb_browser_tool import SandboxBrowserTool
+from app.utils.logger import logger
+
+
 async def main():
     # 创建沙箱和工具
     sandbox = create_sandbox(password="123456")
     # config = DaytonaConfig(
-    #     api_key="dtn_bedf8ed9953f0b5c410c042090e1002a56ba8129b573c92f5607aef04b08c82a",
+    #     api_key="",
     #     api_url="https://app.daytona.io/api",
     #     target="us"
     # )
@@ -42,7 +46,9 @@ async def main():
     tool = SandboxBrowserTool(sandbox)
 
     # # 执行截图操作
-    result,tooresult = await tool.execute(action="navigate_to",url="https://www.github.com")
+    result, tooresult = await tool.execute(
+        action="navigate_to", url="https://www.github.com"
+    )
     print(result)
 
     # endpoint = "navigate_to"
@@ -58,10 +64,22 @@ async def main():
     # response = sandbox.process.exec(curl_cmd, timeout=30)
     # print(f"Response: {response}")
 
-
     # response = sandbox.process.exec("ls -la")
     # print(response.result)
     # 清理资源（可选）
+    # await computer_tool.cleanup()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())  # 运行异步主函数
+    # await computer_tool.cleanup()
+
+if __name__ == "__main__":
+    asyncio.run(main())  # 运行异步主函数
+    # await computer_tool.cleanup()
+
+if __name__ == "__main__":
+    asyncio.run(main())  # 运行异步主函数
     # await computer_tool.cleanup()
 
 if __name__ == "__main__":

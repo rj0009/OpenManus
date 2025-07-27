@@ -1,40 +1,43 @@
-from daytona import Daytona, DaytonaConfig,CreateSandboxFromImageParams,Resources, Image
+from daytona import (
+    CreateSandboxFromImageParams,
+    Daytona,
+    DaytonaConfig,
+    Image,
+    Resources,
+)
+
 # Using environment variables (DAYTONA_API_KEY, DAYTONA_API_URL, DAYTONA_TARGET)
 # daytona = Daytona()
 # Using explicit configuration
-config = DaytonaConfig(
-    api_key="dtn_bedf8ed9953f0b5c410c042090e1002a56ba8129b573c92f5607aef04b08c82a",
-    api_url="https://app.daytona.io/api",
-    target="us"
-)
+config = DaytonaConfig(api_key="", api_url="https://app.daytona.io/api", target="us")
 daytona = Daytona(config)
 params = CreateSandboxFromImageParams(
-    image="kortix/suna:0.1.3",
+    image="",
     # image=Image.debian_slim("3.12"),
     public=True,
     labels=None,
     env_vars={
-            "CHROME_PERSISTENT_SESSION": "true",
-            "RESOLUTION": "1024x768x24",
-            "RESOLUTION_WIDTH": "1024",
-            "RESOLUTION_HEIGHT": "768",
-            "VNC_PASSWORD": "123456",
-            "ANONYMIZED_TELEMETRY": "false",
-            "CHROME_PATH": "",
-            "CHROME_USER_DATA": "",
-            "CHROME_DEBUGGING_PORT": "9222",
-            "CHROME_DEBUGGING_HOST": "localhost",
-            "CHROME_CDP": ""
-        },
+        "CHROME_PERSISTENT_SESSION": "true",
+        "RESOLUTION": "1024x768x24",
+        "RESOLUTION_WIDTH": "1024",
+        "RESOLUTION_HEIGHT": "768",
+        "VNC_PASSWORD": "123456",
+        "ANONYMIZED_TELEMETRY": "false",
+        "CHROME_PATH": "",
+        "CHROME_USER_DATA": "",
+        "CHROME_DEBUGGING_PORT": "9222",
+        "CHROME_DEBUGGING_HOST": "localhost",
+        "CHROME_CDP": "",
+    },
     resources=Resources(
-            cpu=1,
-            memory=1,
-            disk=1,
-        ),
+        cpu=1,
+        memory=1,
+        disk=1,
+    ),
     auto_stop_interval=15,
     auto_archive_interval=24 * 60,
-    )
-    # Create the sandbox
+)
+# Create the sandbox
 sandbox = daytona.create(params)
 print(f"Sandbox created with ID: {sandbox.id}")
 
@@ -58,7 +61,7 @@ print(f"Sandbox created with ID: {sandbox.id}")
 
 # Define the configuration
 
-# config = DaytonaConfig(api_key="dtn_bedf8ed9953f0b5c410c042090e1002a56ba8129b573c92f5607aef04b08c82a")
+# config = DaytonaConfig(api_key="")
 
 # # Initialize the Daytona client
 

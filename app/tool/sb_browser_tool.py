@@ -1,17 +1,19 @@
-import traceback
-import json
 import base64
 import io
-from PIL import Image
-
+import json
+import traceback
 from typing import Optional  # Add this import for Optional
+
+from PIL import Image
 from pydantic import Field
-from app.daytona.tool_base import Sandbox, ThreadMessage  # Ensure Sandbox is imported correctly
+
+from app.daytona.tool_base import (  # Ensure Sandbox is imported correctly
+    Sandbox,
+    SandboxToolsBase,
+    ThreadMessage,
+)
 from app.tool.base import ToolResult
-from app.daytona.tool_base import SandboxToolsBase
 from app.utils.logger import logger
-
-
 
 # Context = TypeVar("Context")
 _BROWSER_DESCRIPTION = """\
@@ -55,7 +57,7 @@ class SandboxBrowserTool(SandboxToolsBase):
                     "get_dropdown_options",
                     "select_dropdown_option",
                     "click_coordinates",
-                    "drag_drop"
+                    "drag_drop",
                 ],
                 "description": "The browser action to perform",
             },
@@ -102,7 +104,7 @@ class SandboxBrowserTool(SandboxToolsBase):
             "element_target": {
                 "type": "string",
                 "description": "Target element for drag and drop",
-            }
+            },
         },
         "required": ["action"],
         "dependencies": {
@@ -124,13 +126,17 @@ class SandboxBrowserTool(SandboxToolsBase):
     }
     browser_message: Optional[ThreadMessage] = Field(default=None, exclude=True)
 
-    def __init__(self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data):
+    def __init__(
+        self, sandbox: Optional[Sandbox] = None, thread_id: Optional[str] = None, **data
+    ):
         """Initialize with optional sandbox and thread_id."""
         super().__init__(**data)
         if sandbox is not None:
             self._sandbox = sandbox  # Directly set the base class private attribute
 
-    def _validate_base64_image(self, base64_string: str, max_size_mb: int = 10) -> tuple[bool, str]:
+    def _validate_base64_image(
+        self, base64_string: str, max_size_mb: int = 10
+    ) -> tuple[bool, str]:
         """
         Validate base64 image data.
         Args:
@@ -142,13 +148,14 @@ class SandboxBrowserTool(SandboxToolsBase):
         try:
             if not base64_string or len(base64_string) < 10:
                 return False, "Base64 string is empty or too short"
-            if base64_string.startswith('data:'):
+            if base64_string.startswith("data:"):
                 try:
-                    base64_string = base64_string.split(',', 1)[1]
+                    base64_string = base64_string.split(",", 1)[1]
                 except (IndexError, ValueError):
                     return False, "Invalid data URL format"
             import re
-            if not re.match(r'^[A-Za-z0-9+/]*={0,2}$', base64_string):
+
+            if not re.match(r"^[A-Za-z0-9+/]*={0,2}$", base64_string):
                 return False, "Invalid base64 characters detected"
             if len(base64_string) % 4 != 0:
                 return False, "Invalid base64 string length"
@@ -163,7 +170,7 @@ class SandboxBrowserTool(SandboxToolsBase):
                 image_stream = io.BytesIO(image_data)
                 with Image.open(image_stream) as img:
                     img.verify()
-                    supported_formats = {'JPEG', 'PNG', 'GIF', 'BMP', 'WEBP', 'TIFF'}
+                    supported_formats = {"JPEG", "PNG", "GIF", "BMP", "WEBP", "TIFF"}
                     if img.format not in supported_formats:
                         return False, f"Unsupported image format: {img.format}"
                     image_stream.seek(0)
@@ -171,7 +178,10 @@ class SandboxBrowserTool(SandboxToolsBase):
                         width, height = img_check.size
                         max_dimension = 8192
                         if width > max_dimension or height > max_dimension:
-                            return False, f"Image dimensions exceed limit ({max_dimension}x{max_dimension})"
+                            return (
+                                False,
+                                f"Image dimensions exceed limit ({max_dimension}x{max_dimension})",
+                            )
                         if width < 1 or height < 1:
                             return False, f"Invalid image dimensions: {width}x{height}"
             except Exception as e:
@@ -180,16 +190,24 @@ class SandboxBrowserTool(SandboxToolsBase):
         except Exception as e:
             logger.error(f"Unexpected error during base64 image validation: {e}")
             return False, f"Validation error: {str(e)}"
-    async def _execute_browser_action(self, endpoint: str, params: dict = None, method: str = "POST") -> ToolResult:
+
+    async def _execute_browser_action(
+        self, endpoint: str, params: dict = None, method: str = "POST"
+    ) -> ToolResult:
         """Execute a browser automation action through the sandbox API."""
         try:
+            await self._ensure_sandbox()
             url = f"http://localhost:8003/api/automation/{endpoint}"
             if method == "GET" and params:
                 query_params = "&".join([f"{k}={v}" for k, v in params.items()])
                 url = f"{url}?{query_params}"
-                curl_cmd = f"curl -s -X {method} '{url}' -H 'Content-Type: application/json'"
+                curl_cmd = (
+                    f"curl -s -X {method} '{url}' -H 'Content-Type: application/json'"
+                )
             else:
-                curl_cmd = f"curl -s -X {method} '{url}' -H 'Content-Type: application/json'"
+                curl_cmd = (
+                    f"curl -s -X {method} '{url}' -H 'Content-Type: application/json'"
+                )
                 if params:
                     json_data = json.dumps(params)
                     curl_cmd += f" -d '{json_data}'"
@@ -202,9 +220,13 @@ class SandboxBrowserTool(SandboxToolsBase):
                     result.setdefault("role", "assistant")
                     if "screenshot_base64" in result:
                         screenshot_data = result["screenshot_base64"]
-                        is_valid, validation_message = self._validate_base64_image(screenshot_data)
+                        is_valid, validation_message = self._validate_base64_image(
+                            screenshot_data
+                        )
                         if not is_valid:
-                            logger.warning(f"Screenshot validation failed: {validation_message}")
+                            logger.warning(
+                                f"Screenshot validation failed: {validation_message}"
+                            )
                             result["image_validation_error"] = validation_message
                         del result["screenshot_base64"]
 
@@ -215,32 +237,42 @@ class SandboxBrowserTool(SandboxToolsBase):
                     #     is_llm_message=False
                     # )
                     message = ThreadMessage(
-                        type="browser_state",
-                        content=result,
-                        is_llm_message=False
+                        type="browser_state", content=result, is_llm_message=False
                     )
                     self.browser_message = message
                     success_response = {
                         "success": result.get("success", False),
-                        "message": result.get("message", "Browser action completed")
+                        "message": result.get("message", "Browser action completed"),
                     }
-            #         if added_message and 'message_id' in added_message:
-            #             success_response['message_id'] = added_message['message_id']
-                    for field in ["url", "title", "element_count", "pixels_below", "ocr_text", "image_url"]:
+                    #         if added_message and 'message_id' in added_message:
+                    #             success_response['message_id'] = added_message['message_id']
+                    for field in [
+                        "url",
+                        "title",
+                        "element_count",
+                        "pixels_below",
+                        "ocr_text",
+                        "image_url",
+                    ]:
                         if field in result:
                             success_response[field] = result[field]
-                    return (result,self.success_response(success_response)) if success_response["success"] else self.fail_response(success_response)
+                    return (
+                        (result, self.success_response(success_response))
+                        if success_response["success"]
+                        else self.fail_response(success_response)
+                    )
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse response JSON: {e}")
                     return self.fail_response(f"Failed to parse response JSON: {e}")
             else:
                 logger.error(f"Browser automation request failed: {response}")
-                return self.fail_response(f"Browser automation request failed: {response}")
+                return self.fail_response(
+                    f"Browser automation request failed: {response}"
+                )
         except Exception as e:
             logger.error(f"Error executing browser action: {e}")
             logger.debug(traceback.format_exc())
             return self.fail_response(f"Error executing browser action: {e}")
-
 
     async def execute(
         self,
@@ -256,7 +288,7 @@ class SandboxBrowserTool(SandboxToolsBase):
         y: Optional[int] = None,
         element_source: Optional[str] = None,
         element_target: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> ToolResult:
         """
         Execute a browser action in the sandbox environment.
@@ -278,7 +310,7 @@ class SandboxBrowserTool(SandboxToolsBase):
         """
         # async with self.lock:
         try:
-                # Navigation actions
+            # Navigation actions
             if action == "navigate_to":
                 if not url:
                     return self.fail_response("URL is required for navigation")
@@ -289,11 +321,17 @@ class SandboxBrowserTool(SandboxToolsBase):
             elif action == "click_element":
                 if index is None:
                     return self.fail_response("Index is required for click_element")
-                return await self._execute_browser_action("click_element", {"index": index})
+                return await self._execute_browser_action(
+                    "click_element", {"index": index}
+                )
             elif action == "input_text":
                 if index is None or not text:
-                    return self.fail_response("Index and text are required for input_text")
-                return await self._execute_browser_action("input_text", {"index": index, "text": text})
+                    return self.fail_response(
+                        "Index and text are required for input_text"
+                    )
+                return await self._execute_browser_action(
+                    "input_text", {"index": index, "text": text}
+                )
             elif action == "send_keys":
                 if not keys:
                     return self.fail_response("Keys are required for send_keys")
@@ -302,11 +340,15 @@ class SandboxBrowserTool(SandboxToolsBase):
             elif action == "switch_tab":
                 if page_id is None:
                     return self.fail_response("Page ID is required for switch_tab")
-                return await self._execute_browser_action("switch_tab", {"page_id": page_id})
+                return await self._execute_browser_action(
+                    "switch_tab", {"page_id": page_id}
+                )
             elif action == "close_tab":
                 if page_id is None:
                     return self.fail_response("Page ID is required for close_tab")
-                return await self._execute_browser_action("close_tab", {"page_id": page_id})
+                return await self._execute_browser_action(
+                    "close_tab", {"page_id": page_id}
+                )
                 # Scrolling actions
             elif action == "scroll_down":
                 params = {"amount": amount} if amount is not None else {}
@@ -317,32 +359,53 @@ class SandboxBrowserTool(SandboxToolsBase):
             elif action == "scroll_to_text":
                 if not text:
                     return self.fail_response("Text is required for scroll_to_text")
-                return await self._execute_browser_action("scroll_to_text", {"text": text})
+                return await self._execute_browser_action(
+                    "scroll_to_text", {"text": text}
+                )
             # Dropdown actions
             elif action == "get_dropdown_options":
                 if index is None:
-                    return self.fail_response("Index is required for get_dropdown_options")
-                return await self._execute_browser_action("get_dropdown_options", {"index": index})
+                    return self.fail_response(
+                        "Index is required for get_dropdown_options"
+                    )
+                return await self._execute_browser_action(
+                    "get_dropdown_options", {"index": index}
+                )
             elif action == "select_dropdown_option":
                 if index is None or not text:
-                    return self.fail_response("Index and text are required for select_dropdown_option")
-                return await self._execute_browser_action("select_dropdown_option", {"index": index, "text": text})
+                    return self.fail_response(
+                        "Index and text are required for select_dropdown_option"
+                    )
+                return await self._execute_browser_action(
+                    "select_dropdown_option", {"index": index, "text": text}
+                )
                 # Coordinate-based actions
             elif action == "click_coordinates":
                 if x is None or y is None:
-                    return self.fail_response("X and Y coordinates are required for click_coordinates")
-                return await self._execute_browser_action("click_coordinates", {"x": x, "y": y})
+                    return self.fail_response(
+                        "X and Y coordinates are required for click_coordinates"
+                    )
+                return await self._execute_browser_action(
+                    "click_coordinates", {"x": x, "y": y}
+                )
             elif action == "drag_drop":
                 if not element_source or not element_target:
-                    return self.fail_response("Source and target elements are required for drag_drop")
-                return await self._execute_browser_action("drag_drop", {
-                    "element_source": element_source,
-                    "element_target": element_target
-                })
+                    return self.fail_response(
+                        "Source and target elements are required for drag_drop"
+                    )
+                return await self._execute_browser_action(
+                    "drag_drop",
+                    {
+                        "element_source": element_source,
+                        "element_target": element_target,
+                    },
+                )
             # Utility actions
             elif action == "wait":
                 seconds_to_wait = seconds if seconds is not None else 3
-                return await self._execute_browser_action("wait", {"seconds": seconds_to_wait})
+                return await self._execute_browser_action(
+                    "wait", {"seconds": seconds_to_wait}
+                )
             else:
                 return self.fail_response(f"Unknown action: {action}")
         except Exception as e:
@@ -365,7 +428,7 @@ class SandboxBrowserTool(SandboxToolsBase):
             screenshot = state.get("screenshot_base64")
             # Build the state info with all required fields
             state_info = {
-                "url": state.get("url",""),
+                "url": state.get("url", ""),
                 "title": state.get("title", ""),
                 "tabs": [tab.model_dump() for tab in state.get("tabs", [])],
                 "pixels_above": getattr(state, "pixels_above", 0),

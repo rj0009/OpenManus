@@ -107,12 +107,22 @@ class SandboxSettings(BaseModel):
 
 class DaytonaSettings(BaseModel):
     daytona_api_key: str
-    daytona_server_url: Optional[str] = Field("https://app.daytona.io/api", description="")
-    daytona_target: Optional[str] = Field("us", description="enum ['asia', 'eu', 'us']")
-    sandbox_image_name: Optional[str]= Field("kortix/suna:0.1.3", description="")
-    sandbox_entrypoint: Optional[str]= Field("/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf", description="")
-    sandbox_id: Optional[str] = Field(None, description="ID of the daytona sandbox to use, if any")
-    VNC_password: Optional[str] = Field("123456", description="VNC password for the vnc service in sandbox")
+    daytona_server_url: Optional[str] = Field(
+        "https://app.daytona.io/api", description=""
+    )
+    daytona_target: Optional[str] = Field("us", description="enum ['eu', 'us']")
+    sandbox_image_name: Optional[str] = Field("whitezxj/sandbox:0.1.0", description="")
+    sandbox_entrypoint: Optional[str] = Field(
+        "/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf",
+        description="",
+    )
+    # sandbox_id: Optional[str] = Field(
+    #     None, description="ID of the daytona sandbox to use, if any"
+    # )
+    VNC_password: Optional[str] = Field(
+        "123456", description="VNC password for the vnc service in sandbox"
+    )
+
 
 class MCPServerConfig(BaseModel):
     """Configuration for a single MCP server"""
@@ -325,6 +335,7 @@ class Config:
     @property
     def sandbox(self) -> SandboxSettings:
         return self._config.sandbox
+
     @property
     def daytona(self) -> DaytonaSettings:
         return self._config.daytona_config
