@@ -135,12 +135,12 @@ def create_sandbox(password: str, project_id: str = None):
 
     # Create the sandbox
     sandbox = daytona.create(params)
-    logger.debug(f"Sandbox created with ID: {sandbox.id}")
+    logger.info(f"Sandbox created with ID: {sandbox.id}")
 
     # Start supervisord in a session for new sandbox
     start_supervisord_session(sandbox)
 
-    logger.debug(f"Sandbox environment successfully initialized")
+    logger.info(f"Sandbox environment successfully initialized")
     return sandbox
 
 

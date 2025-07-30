@@ -13,10 +13,10 @@ from app.tool import Terminate, ToolCollection
 from app.tool.ask_human import AskHuman
 from app.tool.browser_use_tool import BrowserUseTool
 from app.tool.mcp import MCPClients, MCPClientTool
-from app.tool.sb_browser_tool import SandboxBrowserTool
-from app.tool.sb_files_tool import SandboxFilesTool
-from app.tool.sb_shell_tool import SandboxShellTool
-from app.tool.sb_vision_tool import SandboxVisionTool
+from app.tool.sandbox.sb_browser_tool import SandboxBrowserTool
+from app.tool.sandbox.sb_files_tool import SandboxFilesTool
+from app.tool.sandbox.sb_shell_tool import SandboxShellTool
+from app.tool.sandbox.sb_vision_tool import SandboxVisionTool
 
 
 class SandboxManus(ToolCallAgent):
