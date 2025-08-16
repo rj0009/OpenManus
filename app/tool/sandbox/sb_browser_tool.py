@@ -258,7 +258,7 @@ class SandboxBrowserTool(SandboxToolsBase):
                         if field in result:
                             success_response[field] = result[field]
                     return (
-                        (result, self.success_response(success_response))
+                        self.success_response(success_response)
                         if success_response["success"]
                         else self.fail_response(success_response)
                     )
