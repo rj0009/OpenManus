@@ -1,3 +1,5 @@
+import time
+
 from daytona import (
     CreateSandboxFromImageParams,
     Daytona,
@@ -90,6 +92,7 @@ def start_supervisord_session(sandbox: Sandbox):
                 var_async=True,
             ),
         )
+        time.sleep(25)  # Wait a bit to ensure supervisord starts properly
         logger.info(f"Supervisord started in session {session_id}")
     except Exception as e:
         logger.error(f"Error starting supervisord session: {str(e)}")

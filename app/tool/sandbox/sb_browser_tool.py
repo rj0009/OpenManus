@@ -229,7 +229,7 @@ class SandboxBrowserTool(SandboxToolsBase):
                                 f"Screenshot validation failed: {validation_message}"
                             )
                             result["image_validation_error"] = validation_message
-                        del result["screenshot_base64"]
+                            del result["screenshot_base64"]
 
                     # added_message = await self.thread_manager.add_message(
                     #     thread_id=self.thread_id,

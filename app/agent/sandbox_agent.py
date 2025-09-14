@@ -11,7 +11,6 @@ from app.logger import logger
 from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
 from app.tool import Terminate, ToolCollection
 from app.tool.ask_human import AskHuman
-from app.tool.browser_use_tool import BrowserUseTool
 from app.tool.mcp import MCPClients, MCPClientTool
 from app.tool.sandbox.sb_browser_tool import SandboxBrowserTool
 from app.tool.sandbox.sb_files_tool import SandboxFilesTool
@@ -205,7 +204,7 @@ class SandboxManus(ToolCallAgent):
         original_prompt = self.next_step_prompt
         recent_messages = self.memory.messages[-3:] if self.memory.messages else []
         browser_in_use = any(
-            tc.function.name == BrowserUseTool().name
+            tc.function.name == SandboxBrowserTool().name
             for msg in recent_messages
             if msg.tool_calls
             for tc in msg.tool_calls

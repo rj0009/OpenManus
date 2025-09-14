@@ -170,8 +170,9 @@ class SandboxVisionTool(SandboxToolsBase):
             )
             self.vision_message = message
             # return self.success_response(f"成功加载并压缩图片 '{cleaned_path}' (由 {file_info.size / 1024:.1f}KB 压缩到 {len(compressed_bytes) / 1024:.1f}KB)。")
-            return self.success_response(
-                f"成功加载并压缩图片 '{cleaned_path}'，压缩后的内容为：{base64_image}"
+            return ToolResult(
+                output=f"成功加载并压缩图片 '{cleaned_path}'",
+                base64_image=base64_image,
             )
         except Exception as e:
             return self.fail_response(f"see_image 执行异常: {str(e)}")
