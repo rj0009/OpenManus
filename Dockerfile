@@ -12,6 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl build-essential python3-dev zlib1g-dev libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN uv pip install --system -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txtxt
 
 CMD ["bash"]
