@@ -8,6 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git curl \
 
 COPY . .
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl build-essential python3-dev zlib1g-dev libjpeg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN uv pip install --system -r requirements.txt
 
 CMD ["bash"]
